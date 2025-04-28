@@ -15,6 +15,7 @@ MP_SOLUTIONS = {
     "PickCube-v1": solvePickCube,
     "StackCube-v1": solveStackCube,
     "PegInsertionSide-v1": solvePegInsertionSide,
+    "PegInsertionSide-v2": solvePegInsertionSide,
     "PlugCharger-v1": solvePlugCharger,
     "PushCube-v1": solvePushCube,
     "PullCubeTool-v1": solvePullCubeTool,

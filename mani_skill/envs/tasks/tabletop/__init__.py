@@ -1,6 +1,7 @@
 from .assembling_kits import AssemblingKitsEnv
 from .lift_peg_upright import LiftPegUprightEnv
 from .peg_insertion_side import PegInsertionSideEnv
+from .peg_insertion_side_v2 import PegInsertionSideV2Env
 from .pick_clutter_ycb import PickClutterYCBEnv
 from .pick_cube import PickCubeEnv
 from .pick_single_ycb import PickSingleYCBEnv
