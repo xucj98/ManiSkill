@@ -115,6 +115,8 @@ class Args:
 def reorder_keys(d, ref_dict):
     out = dict()
     for k, v in ref_dict.items():
+        if k not in d:
+            continue
         if isinstance(v, dict) or isinstance(v, spaces.Dict):
             out[k] = reorder_keys(d[k], ref_dict[k])
         else:
@@ -195,6 +197,7 @@ class SmallDemoDataset_DiffusionPolicy(Dataset):
 
         USED_OBS = ["agent", "extra", "sensor_data"]
         obs_seq = {key: get_slice_data(self._h5_file[f"{traj_key}/obs/{key}"]) for key in USED_OBS}
+        obs_seq = reorder_keys(obs_seq, self.obs_space)
         obs_seq = self.obs_process_fn(obs_seq)
         if start < 0:
             for k in obs_seq.keys():
