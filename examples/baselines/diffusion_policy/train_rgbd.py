@@ -23,6 +23,7 @@ from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusers.training_utils import EMAModel
 from gymnasium import spaces
 from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
+from mani_skill.utils import common
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.sampler import BatchSampler, RandomSampler
@@ -553,19 +554,11 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------------- #
     # Training begins.
     # ---------------------------------------------------------------------------- #
-    def to_device(data):
-        if isinstance(data, dict):
-            return {k: to_device(v) for k, v in data.items()}
-        elif isinstance(data, torch.Tensor):
-            return data.to(device)
-        else:
-            raise NotImplementedError(f"Type {type(data)} is not support")
-
     agent.train()
     pbar = tqdm(total=args.total_iters)
     last_tick = time.time()
     for iteration, data_batch in enumerate(train_dataloader):
-        data_batch = to_device(data_batch)
+        data_batch = common.to_tensor(data_batch, device)
 
         timings["data_loading"] += time.time() - last_tick
 
