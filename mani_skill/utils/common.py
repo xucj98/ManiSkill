@@ -9,6 +9,7 @@ import gymnasium as gym
 import numpy as np
 import sapien.physx as physx
 import torch
+import cv2
 
 from mani_skill.utils.structs.types import Array, Device
 
@@ -379,6 +380,43 @@ def to_numpy(array: Union[Array, Sequence], dtype=None) -> np.ndarray:
         return array.astype(dtype)
     return array
 
+def get_tensor_shape(data):
+    if isinstance(data, torch.Tensor):
+        return data.shape, torch.min(data).item(), torch.max(data).item()
+    shape = {}
+    if isinstance(data, dict):
+        for k, v in data.items():
+            shape[k] = get_tensor_shape(v)
+    return shape
+
+def log_obs_img(obs, c_last=False, dep_clamp=2000):
+    """
+    Args:
+        obs: {
+            "rgb": (B, T, C, H, W),
+            "depth" (B, T, C, H, W),
+        }
+    """
+    if c_last:
+        obs["rgb"] = obs["rgb"].permute(0, 1, 4, 2, 3)
+        obs["depth"] = obs["depth"].permute(0, 1, 4, 2, 3)
+    for idx, rgb in enumerate(obs["rgb"][:5]):
+        for channel in range(0, rgb.shape[1], 3):
+            img = rgb[0][channel:channel+3].cpu().numpy()
+            img = np.transpose(img, (1, 2, 0))
+            img = img[:, :, ::-1]
+            cv2.imwrite(f'rgb-{idx}-{channel}.jpg', img)
+    if dep_clamp is not None and dep_clamp > 0:
+        dep = obs["depth"]
+        dep[dep < 0] = 0
+        dep[dep > dep_clamp] = 0
+    for idx, dep in enumerate(obs["depth"][:5]):
+        for channel in range(dep.shape[1]):
+            img = dep[0][channel].cpu().numpy()
+            img = img.astype(np.float32) / 2000
+            img = img * 255
+            img = img.astype(np.uint8)
+            cv2.imwrite(f'depth-{idx}-{channel}.jpg', img)
 
 # -------------------------------------------------------------------------- #
 # Utilities for working with quaternions
