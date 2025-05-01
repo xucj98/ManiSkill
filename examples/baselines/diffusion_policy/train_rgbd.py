@@ -30,12 +30,13 @@ from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torch.utils.tensorboard import SummaryWriter
 
 from diffusion_policy.conditional_unet1d import ConditionalUnet1D
-from diffusion_policy.evaluate import evaluate
+from diffusion_policy.evaluate import evaluate, evaluate_on_dataset
 from diffusion_policy.make_env import make_eval_envs
 from diffusion_policy.plain_conv import PlainConv
 from diffusion_policy.utils import (IterationBasedBatchSampler,
                                     build_state_obs_extractor, convert_obs,
                                     worker_init_fn)
+from torchvision.models.resnet import resnet18
 
 
 @dataclass
@@ -62,6 +63,7 @@ class Args:
     demo_path: str = (
         "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
     )
+    val_demo_path: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
     """the path of demo dataset, it is expected to be a ManiSkill dataset h5py format file"""
     num_demos: Optional[int] = None
     """number of trajectories to load from the demo dataset"""
@@ -258,9 +260,13 @@ class Agent(nn.Module):
             total_visual_channels += env.single_observation_space["depth"].shape[-1]
 
         visual_feature_dim = 256
-        self.visual_encoder = PlainConv(
-            in_channels=total_visual_channels, out_dim=visual_feature_dim, pool_feature_map=True
-        )
+        # self.visual_encoder = PlainConv(
+        #     in_channels=total_visual_channels, out_dim=visual_feature_dim, pool_feature_map=True
+        # )
+        self.visual_encoder = resnet18(num_classes=visual_feature_dim)
+        self.visual_encoder.conv1 = nn.Conv2d(total_visual_channels, 64,
+                                              kernel_size=7, stride=2, padding=3, bias=False)
+
         self.noise_pred_net = ConditionalUnet1D(
             input_dim=self.act_dim,  # act_horizon is not used (U-Net doesn't care)
             global_cond_dim=self.obs_horizon * (visual_feature_dim + obs_state_dim),
@@ -281,7 +287,10 @@ class Agent(nn.Module):
             rgb = obs_seq["rgb"].float() / 255.0  # (B, obs_horizon, 3*k, H, W)
             img_seq = rgb
         if self.include_depth:
-            depth = obs_seq["depth"].float() / 1024.0  # (B, obs_horizon, 1*k, H, W)
+            depth = obs_seq["depth"].float()  # (B, obs_horizon, 1*k, H, W)
+            depth[depth < 0] = 0
+            depth[depth > 3000] = 0
+            depth = depth / 1024.0
             img_seq = depth
         if self.include_rgb and self.include_depth:
             img_seq = torch.cat([rgb, depth], dim=2)  # (B, obs_horizon, C, H, W), C=4*k
@@ -422,7 +431,8 @@ if __name__ == "__main__":
         reward_mode="sparse",
         obs_mode=args.obs_mode,
         render_mode="rgb_array",
-        human_render_camera_configs=dict(shader_pack="default")
+        human_render_camera_configs=dict(shader_pack="default"),
+        sensor_configs=dict(shader_pack="default"),
     )
     assert args.max_episode_steps != None, "max_episode_steps must be specified as imitation learning algorithms task solve speed is dependent on the data you train on"
     env_kwargs["max_episode_steps"] = args.max_episode_steps
@@ -495,6 +505,15 @@ if __name__ == "__main__":
         persistent_workers=(args.num_dataload_workers > 0),
     )
 
+    val_dataset = SmallDemoDataset_DiffusionPolicy(
+        data_path=args.val_demo_path,
+        obs_process_fn=obs_process_fn,
+        obs_space=orignal_obs_space,
+        include_rgb=include_rgb,
+        include_depth=include_depth,
+        num_traj=100,
+    )
+
     agent = Agent(envs, args).to(device)
 
     optimizer = optim.AdamW(
@@ -526,6 +545,9 @@ if __name__ == "__main__":
             eval_metrics = evaluate(
                 args.num_eval_episodes, ema_agent, envs, device, args.sim_backend
             )
+            other_metrics = evaluate_on_dataset(val_dataset, ema_agent, args, device)
+            for k, v in other_metrics.items():
+                eval_metrics[k] = v
             timings["eval"] += time.time() - last_tick
 
             print(f"Evaluated {len(eval_metrics['success_at_end'])} episodes")

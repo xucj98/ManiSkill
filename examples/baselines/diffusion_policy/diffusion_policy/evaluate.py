@@ -1,6 +1,7 @@
 from collections import defaultdict
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from mani_skill.utils import common
 
@@ -38,3 +39,24 @@ def evaluate(n: int, agent, eval_envs, device, sim_backend: str, progress_bar: b
     for k in eval_metrics.keys():
         eval_metrics[k] = np.stack(eval_metrics[k])
     return eval_metrics
+
+def evaluate_on_dataset(dataset, agent, args, device):
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False)
+
+    se = 0.
+    n = 0.
+    pbar = tqdm(total=len(dataloader))
+    for batch in dataloader:
+        batch = common.to_tensor(batch, device)
+        observations = batch["observations"]
+        observations["rgb"] = observations["rgb"].permute(0, 1, 3, 4, 2)
+        observations["depth"] = observations["depth"].permute(0, 1, 3, 4, 2)
+        action = agent.get_action(observations)
+        action_gt = batch["actions"][:, args.obs_horizon - 1: args.obs_horizon + args.act_horizon - 1]
+        se += (action - action_gt).pow(2).sum()
+        n += action_gt.numel()
+        pbar.update(1)
+        pbar.set_postfix({"mse": (se / n).item()})
+    pbar.close()
+    return {"mse": (se / n).item()}
+
