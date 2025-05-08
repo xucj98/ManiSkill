@@ -111,6 +111,14 @@ class Args:
     control_mode: str = "pd_joint_delta_pos"
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
 
+    # Observation process arguments
+    depth_clamp: int = 3000
+    """Clamp depth value to [0, threshold], depth value beyond threshold will be set to 0."""
+    used_cameras: str = "all"
+    """Camera used as DP input. Can be camera ids, such as "0", "0,1,2,"."""
+    use_state: bool = True
+    """Whether to use state as DP input."""
+
     # additional tags/configs for logging purposes to wandb and shared comparisons with other algorithms
     demo_type: Optional[str] = None
 
@@ -264,12 +272,15 @@ class Agent(nn.Module):
         #     in_channels=total_visual_channels, out_dim=visual_feature_dim, pool_feature_map=True
         # )
         self.visual_encoder = resnet18(num_classes=visual_feature_dim)
+        if args.used_cameras != "all":
+            num_cameras = len(args.used_cameras.split(","))
+            total_visual_channels = self.include_rgb * 3 * num_cameras + self.include_depth * num_cameras
         self.visual_encoder.conv1 = nn.Conv2d(total_visual_channels, 64,
                                               kernel_size=7, stride=2, padding=3, bias=False)
 
         self.noise_pred_net = ConditionalUnet1D(
             input_dim=self.act_dim,  # act_horizon is not used (U-Net doesn't care)
-            global_cond_dim=self.obs_horizon * (visual_feature_dim + obs_state_dim),
+            global_cond_dim=self.obs_horizon * (visual_feature_dim + (obs_state_dim if args.use_state else 0)),
             diffusion_step_embed_dim=args.diffusion_step_embed_dim,
             down_dims=args.unet_dims,
             n_groups=args.n_groups,
@@ -285,11 +296,19 @@ class Agent(nn.Module):
     def encode_obs(self, obs_seq, eval_mode):
         if self.include_rgb:
             rgb = obs_seq["rgb"].float() / 255.0  # (B, obs_horizon, 3*k, H, W)
+            if args.used_cameras != "all":
+                camera_ids = [int(x) for x in args.used_cameras.split(",")]
+                channel_ids = [x for k in camera_ids for x in range(k * 3, k * 3 + 3)]
+                rgb = rgb[:, :, channel_ids]
             img_seq = rgb
         if self.include_depth:
             depth = obs_seq["depth"].float()  # (B, obs_horizon, 1*k, H, W)
-            depth[depth < 0] = 0
-            depth[depth > 3000] = 0
+            if args.depth_clamp > 0:
+                depth[depth < 0] = 0
+                depth[depth > args.depth_clamp] = 0
+            if args.used_cameras != "all":
+                camera_ids = [int(x) for x in args.used_cameras.split(",")]
+                depth = depth[:, :, camera_ids]
             depth = depth / 1024.0
             img_seq = depth
         if self.include_rgb and self.include_depth:
@@ -302,9 +321,12 @@ class Agent(nn.Module):
         visual_feature = visual_feature.reshape(
             batch_size, self.obs_horizon, visual_feature.shape[1]
         )  # (B, obs_horizon, D)
-        feature = torch.cat(
-            (visual_feature, obs_seq["state"]), dim=-1
-        )  # (B, obs_horizon, D+obs_state_dim)
+        if args.use_state:
+            feature = torch.cat(
+                (visual_feature, obs_seq["state"]), dim=-1
+            )  # (B, obs_horizon, D+obs_state_dim)
+        else:
+            feature = visual_feature
         return feature.flatten(start_dim=1)  # (B, obs_horizon * (D+obs_state_dim))
 
     def compute_loss(self, obs_seq, action_seq):
