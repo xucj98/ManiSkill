@@ -383,6 +383,8 @@ def to_numpy(array: Union[Array, Sequence], dtype=None) -> np.ndarray:
 def get_tensor_shape(data):
     if isinstance(data, torch.Tensor):
         return data.shape, torch.min(data).item(), torch.max(data).item()
+    if isinstance(data, np.ndarray):
+        return data.shape, np.min(data).item(), np.max(data).item()
     shape = {}
     if isinstance(data, dict):
         for k, v in data.items():
