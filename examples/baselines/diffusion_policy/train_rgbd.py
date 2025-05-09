@@ -497,7 +497,7 @@ if __name__ == "__main__":
             np.transpose, axes=(0, 3, 1, 2)
         ),  # (B, H, W, C) -> (B, C, H, W)
         state_obs_extractor=build_state_obs_extractor(args.env_id),
-        depth = "rgbd" in args.demo_path
+        depth = "rgbd" in args.obs_mode or "depth" in args.obs_mode,
     )
 
     # create temporary env to get original observation space as AsyncVectorEnv (CPU parallelization) doesn't permit that
