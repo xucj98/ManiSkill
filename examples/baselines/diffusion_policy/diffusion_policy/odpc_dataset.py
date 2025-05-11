@@ -2,34 +2,20 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data.dataset import Dataset
-from gymnasium import spaces
-
-
-def reorder_keys(d, ref_dict):
-    out = dict()
-    for k, v in ref_dict.items():
-        if k not in d:
-            continue
-        if isinstance(v, dict) or isinstance(v, spaces.Dict):
-            out[k] = reorder_keys(d[k], ref_dict[k])
-        else:
-            out[k] = d[k]
-    return out
 
 
 class ODPCDataset(Dataset):
-    def __init__(self, args, data_path, obs_process_fn, obs_space, include_rgb, include_depth, num_traj):
+    def __init__(
+            self,
+            data_path,
+            obs_horizon,
+            pred_horizon,
+            slices_step=1,
+            num_traj=None,
+    ):
         self.data_path = data_path
-        self.obs_process_fn = obs_process_fn
-        self.obs_space = obs_space
-        self.include_rgb = include_rgb
-        self.include_depth = include_depth
-        self.control_mode = args.control_mode
 
-        self.obs_horizon, self.pred_horizon = obs_horizon, pred_horizon = (
-            args.obs_horizon,
-            args.pred_horizon,
-        )
+        self.obs_horizon, self.pred_horizon = obs_horizon, pred_horizon
 
         with h5py.File(self.data_path, "r") as file:
             keys = list(file.keys())
@@ -66,7 +52,7 @@ class ODPCDataset(Dataset):
                 # Note that in the original code, pad_after = act_horizon - 1, but I think this is not the best choice
                 self.slices += [
                     (traj_idx, start, start + pred_horizon)
-                    for start in range(traj_start, traj_len - pred_horizon + pad_after)
+                    for start in range(traj_start, traj_len - pred_horizon + pad_after, slices_step)
                 ]  # slice indices follow convention [start, end)
 
                 pbar.update(1)
@@ -96,26 +82,35 @@ class ODPCDataset(Dataset):
             else:
                 raise NotImplementedError(f"H5 file type {type(file)} not supported")
 
-        USED_OBS = ["agent", "extra", "sensor_data"]
-        obs_seq = {key: get_slice_data(self._h5_file[f"{traj_key}/obs/{key}"]) for key in USED_OBS}
-        obs_seq = reorder_keys(obs_seq, self.obs_space)
-        obs_seq = self.obs_process_fn(obs_seq)
+        sensor_data = get_slice_data(self._h5_file[f"{traj_key}/obs/sensor_data"])
+        obs_seq = {
+            key: np.transpose(
+                np.concatenate([v[key] for v in sensor_data.values()], axis=-1), axes=(0, 3, 1, 2)
+            ) for key in ["rgb", "depth"]
+        }
 
-        poses_world_peg = self._h5_file[f'{traj_key}/obs/extra/peg_pose'][start: end + 1]
+        poses_peg = self._h5_file[f'{traj_key}/obs/extra/peg_pose'][start: end + 1]
+        poses_ee = self._h5_file[f'{traj_key}/obs/extra/tcp_pose'][start: end + 1]
+        poses_base = self._h5_file[f'{traj_key}/obs/extra/base_pose'][start: end + 1]
         poses_cam0_world = self._h5_file[f'{traj_key}/obs/extra/cam0_world_pose'][start: end + 1]
+        intrinsic = self._h5_file[f'{traj_key}/obs/sensor_param/base_camera/intrinsic_cv'][0]
         act_seq = self._h5_file[f"{traj_key}/actions"][start: end]
         if end > L:
-            poses_world_peg = np.concatenate([poses_world_peg, poses_world_peg[-1:].repeat(end - L, 0)], axis=0)
-            poses_cam0_world = np.concatenate([poses_cam0_world, poses_cam0_world[-1:].repeat(end - L, 0)], axis=0)
+            poses_peg, poses_base, poses_ee, poses_cam0_world = [
+                np.concatenate([raw, raw[-1:].repeat(end - L, 0)], axis=0)
+                for raw in [poses_peg, poses_base, poses_ee, poses_cam0_world]
+            ]
+
             act_seq = np.concatenate([act_seq, np.zeros_like(act_seq[-1:]).repeat(end - L, 0)], axis=0)
 
         return {
             "observations": obs_seq,
-            "actions": {
-                "poses_world_peg": poses_world_peg,
-                "poses_cam0_world": poses_cam0_world,
-                "raw": act_seq,
-            },
+            "actions": act_seq,
+            "poses_peg": poses_peg,
+            "poses_ee": poses_ee,
+            "poses_base": poses_base,
+            "poses_cam0_world": poses_cam0_world,
+            "intrinsic": intrinsic,
         }
 
     def __len__(self):
