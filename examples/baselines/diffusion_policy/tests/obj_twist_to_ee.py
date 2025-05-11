@@ -62,7 +62,7 @@ if __name__ == "__main__":
     
     # plot
     time_axis_calc = np.arange(num_frames - 1) * dt
-    fig, axs = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+    fig, axs = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
 
     # 线速度
     axs[0].plot(time_axis_calc, actions_pred[:, 0], 'r--', label='pred vx')
@@ -89,5 +89,12 @@ if __name__ == "__main__":
     axs[1].legend()
     axs[1].grid(True)
 
+    # 启动时刻
+    delta_poses_peg = np.sum(np.abs(poses_world_peg[1:] - poses_world_peg[:-1]), axis=1)
+    axs[2].plot(time_axis_calc, delta_poses_peg, 'b-', label='delta pose')
+    axs[2].plot(time_axis_calc, poses_world_peg[1:, 2] - np.min(poses_world_peg[1:, 2]), 'r-', label='z')
+    axs[2].set_yscale('log')
+    axs[2].set_xlabel('Time (s)')
+    axs[2].legend()
     plt.tight_layout()
     plt.show()
