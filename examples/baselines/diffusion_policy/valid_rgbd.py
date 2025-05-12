@@ -95,6 +95,8 @@ class Args:
     """the number of workers to use for loading the training data in the torch dataloader"""
     control_mode: str = "pd_joint_delta_pos"
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
+    use_ema: bool = True
+    """Whether use ema weight."""
 
     # Observation process arguments
     depth_clamp: int = 3000
@@ -185,7 +187,7 @@ if __name__ == "__main__":
         % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
-    ema_agent = RGBDAgent(envs, args).to(device)
+    agent = RGBDAgent(envs, args).to(device)
     if os.path.isdir(args.ckpt_path):
         files = os.listdir(args.ckpt_path)
         steps = []
@@ -205,13 +207,16 @@ if __name__ == "__main__":
 
     for step, ckpt_path in ckpt_paths.items():
         ckpt = torch.load(ckpt_path)
-        ema_agent.load_state_dict(ckpt["ema_agent"])
+        if args.use_ema:
+            agent.load_state_dict(ckpt["agent"])
+        else:
+            agent.load_state_dict(ckpt["agent"])
 
         last_tick = time.time()
         eval_metrics = evaluate(
-            args.num_eval_episodes, ema_agent, envs, device, args.sim_backend
+            args.num_eval_episodes, agent, envs, device, args.sim_backend
         )
-        # other_metrics = evaluate_on_dataset(val_dataset, ema_agent, args, device)
+        # other_metrics = evaluate_on_dataset(val_dataset, agent, args, device)
         # for k, v in other_metrics.items():
         #     eval_metrics[k] = v
         timings["eval"] += time.time() - last_tick
