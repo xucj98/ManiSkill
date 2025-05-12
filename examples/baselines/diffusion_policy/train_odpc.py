@@ -3,15 +3,18 @@ ALGO_NAME = "BC_Diffusion_rgbd_UNet"
 import os
 import random
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
-from functools import partial
 from typing import List, Optional
 
 import gymnasium as gym
 import numpy as np
 import torch
+import torch.optim as optim
 import tyro
 
+from diffusers.optimization import get_scheduler
+from diffusers.training_utils import EMAModel
 from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
 from mani_skill.utils import common
 from torch.utils.data.dataloader import DataLoader
@@ -24,6 +27,8 @@ from diffusion_policy.utils import (IterationBasedBatchSampler,
                                     worker_init_fn)
 from diffusion_policy.data_converison import DataConversion
 from diffusion_policy.odpc_dataset import ODPCDataset
+from diffusion_policy.agent import ODPCAgent, ODPCAgentWrapper
+from diffusion_policy.evaluate import evaluate_odpc, evaluate_on_dataset
 
 
 @dataclass
@@ -49,10 +54,14 @@ class Args:
     """the id of the environment"""
     demo_path: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
     """the path of demo dataset, it is expected to be a ManiSkill dataset h5py format file"""
-    val_id_demo_path: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
+    val_demo_path_ind: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
     """the path of in-domain validation dataset"""
-    val_ood_demo_path: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
-    """the path of out-of-domain validation dataset"""
+    val_demo_path_ood: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
+    """the path of out-domain validation dataset"""
+    robot_ind: str = "panda_peg_insertion"
+    """in-domain robot"""
+    robot_ood: str = "xarm6_robotiq"
+    """out-domain robot"""
 
     num_demos: Optional[int] = None
     """number of trajectories to load from the demo dataset"""
@@ -90,9 +99,9 @@ class Args:
     """the frequency of evaluating the agent on the evaluation environments"""
     save_freq: Optional[int] = None
     """the frequency of saving the model checkpoints. By default this is None and will only save checkpoints based on the best evaluation metrics."""
-    num_eval_episodes: int = 100
+    num_eval_episodes: int = 10
     """the number of episodes to evaluate the agent on"""
-    num_eval_envs: int = 10
+    num_eval_envs: int = 2
     """the number of parallel environments to evaluate the agent on"""
     sim_backend: str = "physx_cpu"
     """the simulation backend to use for evaluation environments. can be "cpu" or "gpu"""
@@ -111,6 +120,18 @@ class Args:
 
     # additional tags/configs for logging purposes to wandb and shared comparisons with other algorithms
     demo_type: Optional[str] = None
+
+
+def save_ckpt(run_name, tag):
+    os.makedirs(f"runs/{run_name}/checkpoints", exist_ok=True)
+    ema.copy_to(ema_agent.parameters())
+    torch.save(
+        {
+            "agent": agent.state_dict(),
+            "ema_agent": ema_agent.state_dict(),
+        },
+        f"runs/{run_name}/checkpoints/{tag}.pt",
+    )
 
 
 if __name__ == "__main__":
@@ -155,11 +176,12 @@ if __name__ == "__main__":
         render_mode="rgb_array",
         human_render_camera_configs=dict(shader_pack="default"),
         sensor_configs=dict(shader_pack="default"),
+        robot_uids=args.robot_ind,
     )
     assert args.max_episode_steps != None, "max_episode_steps must be specified as imitation learning algorithms task solve speed is dependent on the data you train on"
     env_kwargs["max_episode_steps"] = args.max_episode_steps
     other_kwargs = dict(obs_horizon=args.obs_horizon)
-    envs = make_eval_envs(
+    envs_ind = make_eval_envs(
         args.env_id,
         args.num_eval_envs,
         args.sim_backend,
@@ -168,6 +190,23 @@ if __name__ == "__main__":
         video_dir=f"runs/{run_name}/videos" if args.capture_video else None,
         wrappers=[FlattenRGBDObservationWrapper],
     )
+    tmp_env = gym.make(args.env_id, **env_kwargs)
+    obs_space_ind = tmp_env.observation_space
+    tmp_env.close()
+
+    env_kwargs['robot_uids'] = args.robot_ood
+    envs_ood = make_eval_envs(
+        args.env_id,
+        args.num_eval_envs,
+        args.sim_backend,
+        env_kwargs,
+        other_kwargs,
+        video_dir=f"runs/{run_name}/videos" if args.capture_video else None,
+        wrappers=[FlattenRGBDObservationWrapper],
+    )
+    tmp_env = gym.make(args.env_id, **env_kwargs)
+    obs_space_ood = tmp_env.observation_space
+    tmp_env.close()
 
     if args.track:
         import wandb
@@ -192,31 +231,10 @@ if __name__ == "__main__":
         % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
-    obs_process_fn = partial(
-        convert_obs,
-        concat_fn=partial(np.concatenate, axis=-1),
-        transpose_fn=partial(
-            np.transpose, axes=(0, 3, 1, 2)
-        ),  # (B, H, W, C) -> (B, C, H, W)
-        state_obs_extractor=build_state_obs_extractor(args.env_id),
-        depth="rgbd" in args.obs_mode or "depth" in args.obs_mode,
-    )
-
-    # create temporary env to get original observation space as AsyncVectorEnv (CPU parallelization) doesn't permit that
-    tmp_env = gym.make(args.env_id, **env_kwargs)
-    orignal_obs_space = tmp_env.observation_space
-    # determine whether the env will return rgb and/or depth data
-    include_rgb = tmp_env.unwrapped.obs_mode_struct.visual.rgb
-    include_depth = tmp_env.unwrapped.obs_mode_struct.visual.depth
-    tmp_env.close()
-
     dataset = ODPCDataset(
-        args=args,
         data_path=args.demo_path,
-        obs_process_fn=obs_process_fn,
-        obs_space=orignal_obs_space,
-        include_rgb=include_rgb,
-        include_depth=include_depth,
+        obs_horizon=args.obs_horizon,
+        pred_horizon=args.pred_horizon,
         num_traj=args.num_demos
     )
     sampler = RandomSampler(dataset, replacement=False)
@@ -230,8 +248,91 @@ if __name__ == "__main__":
         persistent_workers=(args.num_dataload_workers > 0),
     )
 
-    data_conversion = DataConversion()
+    val_dataset_ind = ODPCDataset(
+        data_path=args.val_demo_path_ind,
+        obs_horizon=args.obs_horizon,
+        pred_horizon=args.pred_horizon,
+        num_traj=args.num_demos,
+    )
+    val_dataset_ood = ODPCDataset(
+        data_path=args.val_demo_path_ood,
+        obs_horizon=args.obs_horizon,
+        pred_horizon=args.pred_horizon,
+        num_traj=args.num_demos,
+    )
+
+    data_conversion = DataConversion(
+
+    )
+
+    agent = ODPCAgent(envs_ind, args, data_conversion.pred_dim).to(device)
+
+    optimizer = optim.AdamW(
+        params=agent.parameters(), lr=args.lr, betas=(0.95, 0.999), weight_decay=1e-6
+    )
+
+    lr_scheduler = get_scheduler(
+        name="cosine",
+        optimizer=optimizer,
+        num_warmup_steps=500,
+        num_training_steps=args.total_iters,
+    )
+
+    ema = EMAModel(parameters=agent.parameters(), power=0.75)
+    ema_agent = ODPCAgent(envs_ind, args, data_conversion.pred_dim).to(device)
+
+
+    agent_ind = ODPCAgentWrapper(ema_agent, envs_ind, data_conversion, obs_space_ind)
+    agent_ood = ODPCAgentWrapper(ema_agent, envs_ood, data_conversion, obs_space_ood)
+
+    best_eval_metrics = defaultdict(float)
+    timings = defaultdict(float)
+
+
+    # define evaluation and logging functions
+    def evaluate_and_save_best(iteration):
+        if iteration % args.eval_freq == 0:
+            last_tick = time.time()
+            ema.copy_to(ema_agent.parameters())
+            eval_metrics = evaluate_odpc(
+                args.num_eval_episodes, agent_ind, envs_ind, device, args.sim_backend
+            )
+            # other_metrics = evaluate_on_dataset(val_dataset, ema_agent, args, device)
+            # for k, v in other_metrics.items():
+            #     eval_metrics[k] = v
+            timings["eval"] += time.time() - last_tick
+
+            print(f"Evaluated {len(eval_metrics['success_at_end'])} episodes")
+            for k in eval_metrics.keys():
+                eval_metrics[k] = np.mean(eval_metrics[k])
+                writer.add_scalar(f"eval/{k}", eval_metrics[k], iteration)
+                print(f"{k}: {eval_metrics[k]:.4f}")
+
+            save_on_best_metrics = ["success_once", "success_at_end"]
+            for k in save_on_best_metrics:
+                if k in eval_metrics and eval_metrics[k] > best_eval_metrics[k]:
+                    best_eval_metrics[k] = eval_metrics[k]
+                    save_ckpt(run_name, f"best_eval_{k}")
+                    print(
+                        f"New best {k}_rate: {eval_metrics[k]:.4f}. Saving checkpoint."
+                    )
+    def log_metrics(iteration):
+        if iteration % args.log_freq == 0:
+            writer.add_scalar(
+                "charts/learning_rate", optimizer.param_groups[0]["lr"], iteration
+            )
+            # writer.add_scalar("losses/total_loss", total_loss.item(), iteration)
+            for k, v in timings.items():
+                writer.add_scalar(f"time/{k}", v, iteration)
 
     for iteration, data_batch in enumerate(train_dataloader):
         data_batch = common.to_tensor(data_batch, device)
-        print(common.get_tensor_shape(data_batch))
+        pred = data_conversion.raw_to_pred(
+            poses_obj=data_batch['poses_peg'],
+            poses_camera_world=data_batch['poses_cam0_world'],
+        )
+        # print(common.get_tensor_shape(data_batch))
+
+        # Evaluation
+        evaluate_and_save_best(iteration)
+        log_metrics(iteration)

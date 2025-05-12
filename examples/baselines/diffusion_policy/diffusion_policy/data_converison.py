@@ -49,6 +49,13 @@ class DataConversion:
         self.rot_rep = rot_rep
         self.dt = dt
 
+    @property
+    def pred_dim(self) -> int:
+        if self.delta_pred == "abs":
+            return 7
+        else:
+            return 6
+
     def raw_to_pred(
             self,
             poses_obj: torch.Tensor,
