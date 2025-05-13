@@ -46,15 +46,13 @@ def solve(env: PegInsertionSideEnv, seed=None, debug=False, vis=False):
     approaching = np.array([0, 0, -1])
     target_closing = env.agent.tcp.pose.to_transformation_matrix()[0, :3, 1].cpu().numpy()
 
-    peg_init_pose = env.peg.pose
-
     grasp_info = compute_grasp_info_by_obb(
         obb, approaching=approaching, target_closing=target_closing, depth=FINGER_LENGTH
     )
     closing, center = grasp_info["closing"], grasp_info["center"]
     grasp_pose = env.agent.build_grasp_pose(approaching, closing, center)
-    offset = sapien.Pose([-max(0.05, env.peg_half_sizes[0, 0].item() / 2 + 0.01), 0, 0])
-    grasp_pose = grasp_pose * (offset)
+    offset = np.random.uniform(0.05, env.peg_half_sizes[0, 0].item() - 0.01)
+    grasp_pose.p = (env.peg.pose * sapien.Pose([-offset, 0, 0])).p[0]
 
     # -------------------------------------------------------------------------- #
     # Reach
@@ -69,28 +67,32 @@ def solve(env: PegInsertionSideEnv, seed=None, debug=False, vis=False):
     if res == -1: return res
     planner.close_gripper()
 
+    res = planner.move_to_pose_with_screw(reach_pose)
+    if res == -1 or res[-1]['elapsed_steps'].item() > 350: return -1
+
     # -------------------------------------------------------------------------- #
     # Align Peg
     # -------------------------------------------------------------------------- #
 
     # align the peg with the hole
-    insert_pose = env.goal_pose * peg_init_pose.inv() * grasp_pose
-    offset = sapien.Pose([-0.01 - env.peg_half_sizes[0, 0].item(), 0, 0])
-    pre_insert_pose = insert_pose * (offset)
-    res = planner.move_to_pose_with_screw(pre_insert_pose)
-    if res == -1: return res
+    offset = 0.01 + env.peg_half_sizes[0, 0].item()
+    peg_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0])
+    cur_pose  = reach_pose
     # refine the insertion pose
-    for i in range(3):
-        delta_pose = env.goal_pose * (offset) * env.peg.pose.inv()
-        pre_insert_pose = delta_pose * pre_insert_pose
-        res = planner.move_to_pose_with_screw(pre_insert_pose)
+    for _ in range(3):
+        delta_pose = peg_insert_pose * env.peg.pose.inv()
+        cur_pose = delta_pose * cur_pose
+        res = planner.move_to_pose_with_screw(cur_pose)
         if res == -1: return res
 
     # -------------------------------------------------------------------------- #
     # Insert
     # -------------------------------------------------------------------------- #
-    res = planner.move_to_pose_with_screw(insert_pose * (sapien.Pose([0.05, 0, 0])))
+    delta_pose = env.goal_pose * sapien.Pose([0.03, 0, 0]) * env.peg.pose.inv()
+    insert_pose = delta_pose * cur_pose
+    res = planner.move_to_pose_with_screw(insert_pose)
     if res == -1: return res
+
     planner.close()
     return res
 
