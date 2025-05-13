@@ -17,7 +17,7 @@ from mani_skill.utils import common
 from mani_skill.utils.structs.pose import Pose
 from mani_skill.examples.motionplanning.panda.utils import compute_grasp_info_by_obb
 
-from diffusion_policy.data_converison import DataConversion
+from diffusion_policy.data_converison import DataConversion, pose_multiply, pose_inv
 from diffusion_policy.conditional_unet1d import ConditionalUnet1D
 
 from torchvision.models.resnet import resnet18
@@ -270,8 +270,8 @@ class ODPCAgent(nn.Module):
         return feature.flatten(start_dim=1)  # (B, obs_horizon * (D+obs_state_dim))
 
     def compute_loss(self, obs_seq, action_seq):
-        B = obs_seq["state"].shape[0]
-        device = obs_seq["state"].device
+        B = obs_seq["rgb"].shape[0]
+        device = obs_seq["rgb"].device
 
         # observation as FiLM conditioning
         obs_cond = self.encode_obs(
@@ -345,25 +345,32 @@ class ODPCAgent(nn.Module):
 class ODPCAgentWrapper(nn.Module):
     def __init__(
             self,
-            agent,
+            agent: ODPCAgent,
             envs,
             dc: DataConversion,
             origin_obs_space,
+            robot_uid,
     ):
         super(ODPCAgentWrapper, self).__init__()
-        self.agent = agent
+        self.agent: ODPCAgent = agent
         self.envs = envs
         self.dc = dc
         self.num_envs = envs.num_envs
-        self.stages = np.zeros(envs.num_envs)
         self.origin_obs_space = origin_obs_space
 
-        self.grasp_pose = np.zeros((envs.num_envs, 7))
-        self.reach_pose = np.zeros((envs.num_envs, 7))
+        self.stages = torch.zeros(envs.num_envs)
+        self.action_step = 0
+        self.act_horizon = agent.act_horizon
+        self.agent_action = torch.zeros((envs.num_envs, agent.act_horizon, dc.control_dim))
 
-    # def reset(self):
-    #     print('??????????????????????????reset')
-    #     self.stages[:] = 0
+        self.grasp_pose = torch.zeros((envs.num_envs, 7))
+        self.reach_pose = torch.zeros((envs.num_envs, 7))
+        if "panda" in robot_uid:
+            self.gripper_state = torch.tensor([1., -1.]) # open, close
+        elif "robotiq" in robot_uid:
+            self.gripper_state = torch.tensor([0., 0.84]) # open, close
+        else:
+            raise NotImplementedError
 
     def state_to_dict(self, state, ref_dict):
         state_dict = {}
@@ -389,75 +396,90 @@ class ODPCAgentWrapper(nn.Module):
         T[:3, 3] = center
         return sapien.Pose(T)
 
-    @staticmethod
-    def _get_action(target_pose, base, tcp, gripper):
-        # if args.robot_uids is not None and 'robotiq' in args.robot_uids:
-        #     gripper = -gripper
-        # gripper = np.clip(gripper, env.action_space.low[-1], env.action_space.high[-1])
-        target_pose = base.inv() * target_pose
-        cur_pose = base.inv() * tcp
-        p = target_pose.p - cur_pose.p
-        q = quaternion_multiply(target_pose.q, quaternion_invert(cur_pose.q))
-        euler = matrix_to_euler_angles(quaternion_to_matrix(q), "XYZ")
-        action = torch.cat([p, -euler], dim=-1)
-        action = action[0].tolist()
-        action.append(gripper)
-        action = np.array(action)
-        return action
+    def get_grasp_pose(
+            self,
+            peg_half_size,
+            peg_pose,
+            ee_pose
+    ):
+        for i in range(self.num_envs):
+            extents = peg_half_size[i].cpu().numpy() * 2
+            transform = (
+                    Pose.create(peg_pose[i]) * sapien.Pose([-0.07, 0, 0])
+            ).to_transformation_matrix()[0].cpu().numpy()
+            obb = trimesh.primitives.Box(extents=extents, transform=transform)
+            approaching = np.array([0, 0, -1])
+            target_closing = Pose.create(ee_pose[i]).to_transformation_matrix()[0, :3, 1].cpu().numpy()
+            grasp_info = compute_grasp_info_by_obb(
+                obb, approaching=approaching, target_closing=target_closing, depth=0.025)
+            closing, center = grasp_info["closing"], grasp_info["center"]
+            grasp_pose = self.build_grasp_pose(approaching, closing, center)
+            self.grasp_pose[i, :3] = torch.from_numpy(grasp_pose.p)
+            self.grasp_pose[i, 3:] = torch.from_numpy(grasp_pose.q)
+            reach_pose = grasp_pose * sapien.Pose([0, 0, -0.05])
+            self.reach_pose[i, :3] = torch.from_numpy(reach_pose.p)
+            self.reach_pose[i, 3:] = torch.from_numpy(reach_pose.q)
 
     def get_action(self, obs_seq):
         _, state_dict = self.state_to_dict(obs_seq["state"], self.origin_obs_space)
-        tcp_pose = state_dict["extra"]["tcp_pose"][:, 0, :]
-        tcp_pose_np = tcp_pose.cpu().numpy()
+        ee_pose = state_dict["extra"]["tcp_pose"][:, 0, :]
         base_pose = state_dict["extra"]["base_pose"][:, 0, :]
-        base_pose_np = base_pose.cpu().numpy()
 
-        peg_half_size = state_dict['extra']['peg_half_size'][:, -1, :]
-        peg_pose = state_dict['extra']['peg_pose'][:, -1, :]
-        # if np.any(self.stages[0] >= 2) and torch.all(torch.abs(peg_half_size[:, 2] - peg_pose[:, 2]) < 1e-3):
-        #     self.stages[:] = 0
+        if self.action_step == 0:
+            pred = self.agent.get_action(obs_seq)
+            self.agent_action = self.dc.pred_to_control(
+                pred=pred,
+                poses_ee_cur=state_dict["extra"]["tcp_pose"][..., :1, :],
+                poses_base=state_dict["extra"]["base_pose"][..., :1, :],
+                poses_camera_world=state_dict["extra"]["cam0_world_pose"][..., :1, :],
+            )
+            # self.agent_action = torch.randn_like(self.agent_action) * 0.5
 
         if self.stages[0] == 0:
-            for i in range(self.num_envs):
-                extents = peg_half_size[i].cpu().numpy() * 2
-                transform = Pose.create(peg_pose[i]).to_transformation_matrix()[0].cpu().numpy()
-                obb = trimesh.primitives.Box(extents=extents, transform=transform)
-                approaching = np.array([0, 0, -1])
-                target_closing = Pose.create(tcp_pose[i]).to_transformation_matrix()[0, :3, 1].cpu().numpy()
-                grasp_info = compute_grasp_info_by_obb(
-                    obb, approaching=approaching, target_closing=target_closing, depth=0.025)
-                closing, center = grasp_info["closing"], grasp_info["center"]
-                grasp_pose = self.build_grasp_pose(approaching, closing, center)
-                self.grasp_pose[i, :3] = grasp_pose.p
-                self.grasp_pose[i, 3:] = grasp_pose.q
-                reach_pose = grasp_pose * sapien.Pose([0, 0, -0.05])
-                self.reach_pose[i, :3] = reach_pose.p
-                self.reach_pose[i, 3:] = reach_pose.q
+            self.get_grasp_pose(
+                peg_half_size=state_dict['extra']['peg_half_size'][:, -1, :],
+                peg_pose=state_dict['extra']['peg_pose'][:, -1, :],
+                ee_pose=ee_pose,
+            )
             self.stages[:] = 1
 
-        actions = np.zeros((self.num_envs, 1, 7))
+        # get mp_action (motion-planning action)
+        mp_target_pose = torch.zeros_like(ee_pose)
         for i in range(self.num_envs):
-            tcp = Pose.create(tcp_pose[i])
-            base = Pose.create(base_pose[i])
-
             if self.stages[i] == 1:
-                act = self._get_action(self.reach_pose[i], base, tcp, 1.)
-                if np.sum(np.abs(act[:-1])) < 0.05:
+                mp_target_pose[i] = self.reach_pose[i]
+                if torch.sum(torch.abs(ee_pose[i] - mp_target_pose[i])) < 0.05:
                     self.stages[i] = 2
             if self.stages[i] == 2:
-                act = self._get_action(self.grasp_pose[i], base, tcp, 1.)
-                if np.sum(np.abs(act[:-1])) < 0.02:
+                mp_target_pose[i] = self.grasp_pose[i]
+                if torch.sum(torch.abs(ee_pose[i] - mp_target_pose[i])) < 0.02:
                     self.stages[i] = 3
             if 3 <= self.stages[i] < 4:
-                act = self._get_action(self.grasp_pose[i], base, tcp, -1.)
+                mp_target_pose[i] = self.grasp_pose[i]
                 self.stages[i] += 1 / 20
             if 4 <= self.stages[i] < 5:
-                act = self._get_action(self.reach_pose[i], base, tcp, -1.)
-            actions[i, 0] = act
+                mp_target_pose[i] = self.reach_pose[i]
+                if torch.sum(torch.abs(ee_pose[i] - mp_target_pose[i])) < 0.05:
+                    self.stages[i] = 5
+        base_target = pose_multiply(pose_inv(base_pose), mp_target_pose)
+        base_ee = pose_multiply(pose_inv(base_pose), ee_pose)
+        p = base_target[..., :3] - base_ee[..., :3]
+        q = quaternion_multiply(base_target[..., 3:], quaternion_invert(base_ee[..., 3:]))
+        euler = matrix_to_euler_angles(quaternion_to_matrix(q), "XYZ")
+        mp_action = torch.cat([p, -euler], dim=-1)
 
-        actions = torch.from_numpy(actions)
+        # use agent action
+        for i in range(self.num_envs):
+            if self.stages[i] == 5:
+                mp_action[i] = self.agent_action[i][self.action_step]
 
-        return actions
+        gripper = self.gripper_state[(self.stages >= 3).int()].to(mp_action)
+        action = torch.cat([mp_action, gripper[:, None]], dim=-1)
+
+        self.action_step = (self.action_step + 1) % self.act_horizon
+
+        return action[:, None, :]
 
     def reset(self):
         self.stages[:] = 0
+        self.action_step = 0

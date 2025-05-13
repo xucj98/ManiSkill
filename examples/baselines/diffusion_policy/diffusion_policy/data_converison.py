@@ -42,16 +42,25 @@ class DataConversion:
             frame: Frame = "camera_first",
             delta_pred: DeltaPrediction = "rel_to_prev",
             rot_rep: RotationRepresentation = "axis_angle",
+            control_mode: str = "pd_ee_delta_pose",
             dt=0.05,
     ):
         self.frame = frame
         self.delta_pred = delta_pred
         self.rot_rep = rot_rep
         self.dt = dt
+        self.control_mode = control_mode
 
     @property
     def pred_dim(self) -> int:
         if self.delta_pred == "abs":
+            return 7
+        else:
+            return 6
+
+    @property
+    def control_dim(self) -> int:
+        if self.control_mode == "pd_ee_pose":
             return 7
         else:
             return 6
@@ -107,39 +116,48 @@ class DataConversion:
 
         return torch.cat((pos, rot), dim=-1)
 
+    @staticmethod
+    def expend_dim_to(a, dim, length):
+        if a.shape[dim] < length:
+            expand = torch.repeat_interleave(torch.narrow(a, dim, -1, 1), length - a.shape[dim], dim)
+            a = torch.cat((a, expand), dim=dim)
+        return a
+
     @torch.no_grad()
     def pred_to_control(
             self,
             pred: torch.Tensor,
-            poses_ee: torch.Tensor,
+            poses_ee_cur: torch.Tensor,
             poses_base: torch.Tensor,
             poses_camera: Optional[torch.Tensor] = None,
             poses_camera_world: Optional[torch.Tensor] = None,
             poses_obj_cur: Optional[torch.Tensor] = None,
-            control_mode: str = "pd_ee_delta_pose",
     ) -> torch.Tensor:
         """
         Args:
             pred: nn prediction, tensor of shape (..., T, D)
-            poses_ee: ee in world, tensor of shape (..., T+1, 7)
+            poses_ee_cur: ee in world, tensor of shape (..., 1, 7)
             poses_base: robot base in world, tensor of shape (..., T+1, 7)
             poses_camera: camera in world, tensor of shape (..., T+1, 7)
             poses_camera_world: world in camera, tensor of shape (..., T+1, 7)
             poses_obj_cur: current object poses, assume in the self.frame, tensor of shape (..., 1, 7)
-            control_mode: "pd_ee_delta_pose", "pd_ee_pose"
 
         Returns:
             tensor of shape (..., T, 6) for "pd_ee_delta_pose", (..., T, 7) for "pd_ee_pose"
         """
-
-        pos = pred[..., :3]
-        rot = pred[..., 3:]
+        t = pred.shape[-2]
+        poses_base = self.expend_dim_to(poses_base, -2, t + 1)
 
         assert poses_camera is not None or poses_camera_world is not None
         if poses_camera is None:
+            poses_camera_world = self.expend_dim_to(poses_camera_world, -2, t + 1)
             poses_camera = pose_inv(poses_camera_world)
         if poses_camera_world is None:
+            poses_camera = self.expend_dim_to(poses_camera, -2, t + 1)
             poses_camera_world = pose_inv(poses_camera)
+
+        pos = pred[..., :3]
+        rot = pred[..., 3:]
 
         if self.rot_rep == "matrix_3x3":
             # TODO: 如果不满足 RR^T = I,
@@ -184,12 +202,12 @@ class DataConversion:
         else:
             raise NotImplementedError
 
-        poses_base_ee_cur = pose_multiply(pose_inv(poses_base[..., :1, :]), poses_ee[..., :1, :])
+        poses_base_ee_cur = pose_multiply(pose_inv(poses_base[..., :1, :]), poses_ee_cur)
         poses_base_ee = pose_multiply(poses_base_cam, pred, poses_cam_base, poses_base_ee_cur)
 
-        if control_mode == "pd_ee_pose":
+        if self.control_mode == "pd_ee_pose":
             return poses_base_ee
-        elif control_mode == "pd_ee_delta_pose":
+        elif self.control_mode == "pd_ee_delta_pose":
             poses_base_eff = torch.cat((poses_base_ee_cur, poses_base_ee), dim=-2)
             p = poses_base_eff[..., :3]
             q = poses_base_eff[..., 3:]

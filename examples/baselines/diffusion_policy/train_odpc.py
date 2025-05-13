@@ -11,6 +11,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 import torch.optim as optim
+from tqdm import tqdm
 import tyro
 
 from diffusers.optimization import get_scheduler
@@ -54,9 +55,9 @@ class Args:
     """the id of the environment"""
     demo_path: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
     """the path of demo dataset, it is expected to be a ManiSkill dataset h5py format file"""
-    val_demo_path_ind: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
+    val_demo_path_ind: str = None
     """the path of in-domain validation dataset"""
-    val_demo_path_ood: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
+    val_demo_path_ood: str = None
     """the path of out-domain validation dataset"""
     robot_ind: str = "panda_peg_insertion"
     """in-domain robot"""
@@ -88,7 +89,7 @@ class Args:
     )
 
     # Environment/experiment specific arguments
-    obs_mode: str = "rgb+depth"
+    obs_mode: str = "state_dict+rgb+depth"
     """The observation mode to use for the environment, which dictates what visual inputs to pass to the model. Can be "rgb", "depth", or "rgb+depth"."""
     max_episode_steps: Optional[int] = 300
     """Change the environments' max_episode_steps to this value. Sometimes necessary if the demonstrations being imitated are too short. Typically the default
@@ -99,15 +100,15 @@ class Args:
     """the frequency of evaluating the agent on the evaluation environments"""
     save_freq: Optional[int] = None
     """the frequency of saving the model checkpoints. By default this is None and will only save checkpoints based on the best evaluation metrics."""
-    num_eval_episodes: int = 10
+    num_eval_episodes: int = 100
     """the number of episodes to evaluate the agent on"""
-    num_eval_envs: int = 2
+    num_eval_envs: int = 10
     """the number of parallel environments to evaluate the agent on"""
     sim_backend: str = "physx_cpu"
     """the simulation backend to use for evaluation environments. can be "cpu" or "gpu"""
     num_dataload_workers: int = 0
     """the number of workers to use for loading the training data in the torch dataloader"""
-    control_mode: str = "pd_joint_delta_pos"
+    control_mode: str = "pd_ee_delta_pose"
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
 
     # Observation process arguments
@@ -248,21 +249,24 @@ if __name__ == "__main__":
         persistent_workers=(args.num_dataload_workers > 0),
     )
 
-    val_dataset_ind = ODPCDataset(
-        data_path=args.val_demo_path_ind,
-        obs_horizon=args.obs_horizon,
-        pred_horizon=args.pred_horizon,
-        num_traj=args.num_demos,
-    )
-    val_dataset_ood = ODPCDataset(
-        data_path=args.val_demo_path_ood,
-        obs_horizon=args.obs_horizon,
-        pred_horizon=args.pred_horizon,
-        num_traj=args.num_demos,
-    )
+    val_dataset_ind = val_dataset_ood = None
+    if args.val_demo_path_ind is not None:
+        val_dataset_ind = ODPCDataset(
+            data_path=args.val_demo_path_ind,
+            obs_horizon=args.obs_horizon,
+            pred_horizon=args.pred_horizon,
+            num_traj=args.num_demos,
+        )
+    if args.val_demo_path_ood is not None:
+        val_dataset_ood = ODPCDataset(
+            data_path=args.val_demo_path_ood,
+            obs_horizon=args.obs_horizon,
+            pred_horizon=args.pred_horizon,
+            num_traj=args.num_demos,
+        )
 
     data_conversion = DataConversion(
-
+        control_mode=args.control_mode,
     )
 
     agent = ODPCAgent(envs_ind, args, data_conversion.pred_dim).to(device)
@@ -282,8 +286,8 @@ if __name__ == "__main__":
     ema_agent = ODPCAgent(envs_ind, args, data_conversion.pred_dim).to(device)
 
 
-    agent_ind = ODPCAgentWrapper(ema_agent, envs_ind, data_conversion, obs_space_ind)
-    agent_ood = ODPCAgentWrapper(ema_agent, envs_ood, data_conversion, obs_space_ood)
+    agent_ind = ODPCAgentWrapper(ema_agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind)
+    agent_ood = ODPCAgentWrapper(ema_agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood)
 
     best_eval_metrics = defaultdict(float)
     timings = defaultdict(float)
@@ -325,14 +329,32 @@ if __name__ == "__main__":
             for k, v in timings.items():
                 writer.add_scalar(f"time/{k}", v, iteration)
 
+    agent.train()
+    pbar = tqdm(total=args.total_iters)
+
     for iteration, data_batch in enumerate(train_dataloader):
         data_batch = common.to_tensor(data_batch, device)
+
         pred = data_conversion.raw_to_pred(
             poses_obj=data_batch['poses_peg'],
             poses_camera_world=data_batch['poses_cam0_world'],
         )
-        # print(common.get_tensor_shape(data_batch))
+
+        total_loss = agent.compute_loss(
+            obs_seq=data_batch["observations"],
+            action_seq=pred,
+        )
+
+        optimizer.zero_grad()
+        total_loss.backward()
+        optimizer.step()
+        lr_scheduler.step()
+
+        ema.step(agent.parameters())
 
         # Evaluation
         evaluate_and_save_best(iteration)
         log_metrics(iteration)
+
+        pbar.update(1)
+        pbar.set_postfix({"loss": total_loss.item()})

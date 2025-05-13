@@ -325,7 +325,7 @@ if __name__ == "__main__":
         pose_cam_peg = pose_multiply(data_batch['poses_cam0_world'], data_batch['poses_peg'])
         control = dc.pred_to_control(
             pred=pred,
-            poses_ee=data_batch['poses_ee'],
+            poses_ee_cur=data_batch['poses_ee'][..., :1, :],
             poses_base=data_batch['poses_base'],
             poses_camera_world=data_batch['poses_cam0_world'],
             control_mode=args.control_mode,
