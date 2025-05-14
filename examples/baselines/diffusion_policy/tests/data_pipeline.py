@@ -200,5 +200,5 @@ if __name__ == "__main__":
             if control.shape[-1] == 6:
                 dim_names = ['px', 'py', 'pz', 'wx', 'wy', 'wz']
             else:
-                dim_names = ['px', 'py', 'pz', 'ww', 'wx', 'wy', 'wz']
+                dim_names = ['px', 'py', 'pz', 'wx', 'wy', 'wz']
             plot(control[0], data_batch["actions"][0, :, :-1], dim_names=dim_names)
