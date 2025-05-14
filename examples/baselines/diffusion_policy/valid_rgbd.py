@@ -208,7 +208,7 @@ if __name__ == "__main__":
     for step, ckpt_path in ckpt_paths.items():
         ckpt = torch.load(ckpt_path)
         if args.use_ema:
-            agent.load_state_dict(ckpt["agent"])
+            agent.load_state_dict(ckpt["ema_agent"])
         else:
             agent.load_state_dict(ckpt["agent"])
 

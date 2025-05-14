@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 import sapien
 import trimesh.primitives
@@ -191,14 +192,6 @@ class ODPCAgent(nn.Module):
         self.obs_horizon = args.obs_horizon
         self.act_horizon = args.act_horizon
         self.pred_horizon = args.pred_horizon
-        assert (
-                len(env.single_observation_space["state"].shape) == 2
-        )  # (obs_horizon, obs_dim)
-        assert len(env.single_action_space.shape) == 1  # (act_dim, )
-        assert (env.single_action_space.high == 1).all() and (
-                env.single_action_space.low == -1
-        ).all()
-        # denoising results will be clipped to [-1,1], so the action should be in [-1,1] as well
         self.act_dim = act_dim
         obs_state_dim = env.single_observation_space["state"].shape[1]
         total_visual_channels = 0
@@ -350,6 +343,7 @@ class ODPCAgentWrapper(nn.Module):
             dc: DataConversion,
             origin_obs_space,
             robot_uid,
+            video_dir = None,
     ):
         super(ODPCAgentWrapper, self).__init__()
         self.agent: ODPCAgent = agent
@@ -357,10 +351,12 @@ class ODPCAgentWrapper(nn.Module):
         self.dc = dc
         self.num_envs = envs.num_envs
         self.origin_obs_space = origin_obs_space
+        self.act_horizon = agent.act_horizon
+        self.control_mode = dc.control_mode
+        self.video_dir = video_dir
 
         self.stages = torch.zeros(envs.num_envs)
         self.action_step = 0
-        self.act_horizon = agent.act_horizon
         self.agent_action = torch.zeros((envs.num_envs, agent.act_horizon, dc.control_dim))
 
         self.grasp_pose = torch.zeros((envs.num_envs, 7))
@@ -425,7 +421,7 @@ class ODPCAgentWrapper(nn.Module):
         ee_pose = state_dict["extra"]["tcp_pose"][:, 0, :]
         base_pose = state_dict["extra"]["base_pose"][:, 0, :]
 
-        if self.action_step == 0:
+        if self.action_step % self.act_horizon == 0:
             pred = self.agent.get_action(obs_seq)
             self.agent_action = self.dc.pred_to_control(
                 pred=pred,
@@ -433,7 +429,15 @@ class ODPCAgentWrapper(nn.Module):
                 poses_base=state_dict["extra"]["base_pose"][..., :1, :],
                 poses_camera_world=state_dict["extra"]["cam0_world_pose"][..., :1, :],
             )
-            # self.agent_action = torch.randn_like(self.agent_action) * 0.5
+
+            if self.video_dir is not None:
+                images = self.dc.pred_to_visualize(
+                    rgb=obs_seq["rgb"][..., :3, :, :],
+                    pred=pred,
+                    poses_cam_obj_cur=state_dict["extra"]["cam0_peg_pose"][..., :1, :],
+                )
+                for i, rgb in enumerate(images):
+                    cv2.imwrite(f"{self.video_dir}/{i}-{self.action_step}.jpg", rgb[:, :, ::-1])
 
         if self.stages[0] == 0:
             self.get_grasp_pose(
@@ -469,21 +473,29 @@ class ODPCAgentWrapper(nn.Module):
                 if reach_target(0.05):
                     self.stages[i] = 5
         base_target = pose_multiply(pose_inv(base_pose), mp_target_pose)
-        base_ee = pose_multiply(pose_inv(base_pose), ee_pose)
-        p = base_target[..., :3] - base_ee[..., :3]
-        q = quaternion_multiply(base_target[..., 3:], quaternion_invert(base_ee[..., 3:]))
-        euler = matrix_to_euler_angles(quaternion_to_matrix(q), "XYZ")
-        mp_action = torch.cat([p, -euler], dim=-1)
+        if self.control_mode == "pd_ee_delta_pose":
+            base_ee = pose_multiply(pose_inv(base_pose), ee_pose)
+            p = base_target[..., :3] - base_ee[..., :3]
+            q = quaternion_multiply(base_target[..., 3:], quaternion_invert(base_ee[..., 3:]))
+            euler = matrix_to_euler_angles(quaternion_to_matrix(q), "XYZ")
+            mp_action = torch.cat([p, -euler], dim=-1)
+        elif self.control_mode == "pd_ee_pose":
+            p = base_target[..., :3]
+            q = base_target[..., 3:]
+            euler = matrix_to_euler_angles(quaternion_to_matrix(q), "XYZ")
+            mp_action = torch.cat([p, euler], dim=-1)
+        else:
+            raise NotImplementedError
 
         # use agent action
         for i in range(self.num_envs):
             if self.stages[i] == 5:
-                mp_action[i] = self.agent_action[i][self.action_step]
+                mp_action[i] = self.agent_action[i][self.action_step % self.act_horizon]
 
         gripper = self.gripper_state[(self.stages >= 3).int()].to(mp_action)
         action = torch.cat([mp_action, gripper[:, None]], dim=-1)
 
-        self.action_step = (self.action_step + 1) % self.act_horizon
+        self.action_step += 1
 
         return action[:, None, :]
 

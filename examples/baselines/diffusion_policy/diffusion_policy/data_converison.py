@@ -1,5 +1,6 @@
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 
+import numpy as np
 import torch
 
 from mani_skill.utils.geometry.rotation_conversions import (
@@ -9,6 +10,7 @@ from mani_skill.utils.geometry.rotation_conversions import (
     rotation_6d_to_matrix, matrix_to_rotation_6d,
     axis_angle_to_quaternion, quaternion_to_axis_angle,
 )
+from diffusion_policy.utils import visualize_pose
 
 Frame = Literal["camera_first", "camera_cur", "world"]
 RotationRepresentation = Literal["matrix_3x3", "rotation_6d", "quaternion", "euler", "axis_angle", "se3"]
@@ -60,10 +62,7 @@ class DataConversion:
 
     @property
     def control_dim(self) -> int:
-        if self.control_mode == "pd_ee_pose":
-            return 7
-        else:
-            return 6
+        return 6
 
     def raw_to_pred(
             self,
@@ -131,7 +130,7 @@ class DataConversion:
             poses_base: torch.Tensor,
             poses_camera: Optional[torch.Tensor] = None,
             poses_camera_world: Optional[torch.Tensor] = None,
-            poses_obj_cur: Optional[torch.Tensor] = None,
+            poses_frame_obj_cur: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -140,7 +139,7 @@ class DataConversion:
             poses_base: robot base in world, tensor of shape (..., T+1, 7)
             poses_camera: camera in world, tensor of shape (..., T+1, 7)
             poses_camera_world: world in camera, tensor of shape (..., T+1, 7)
-            poses_obj_cur: current object poses, assume in the self.frame, tensor of shape (..., 1, 7)
+            poses_frame_obj_cur: current object poses, assume in the self.frame, tensor of shape (..., 1, 7)
 
         Returns:
             tensor of shape (..., T, 6) for "pd_ee_delta_pose", (..., T, 7) for "pd_ee_pose"
@@ -156,29 +155,10 @@ class DataConversion:
             poses_camera = self.expend_dim_to(poses_camera, -2, t + 1)
             poses_camera_world = pose_inv(poses_camera)
 
-        pos = pred[..., :3]
-        rot = pred[..., 3:]
+        pred = self.pred_to_quaternion(pred)
 
-        if self.rot_rep == "matrix_3x3":
-            # TODO: 如果不满足 RR^T = I,
-            rot = rot.reshape(rot.shape[:-1] + (3, 3))
-            rot = matrix_to_quaternion(rot)
-        elif self.rot_rep == "rotation_6d":
-            rot = matrix_to_quaternion(rotation_6d_to_matrix(rot))
-        elif self.rot_rep == "quaternion":
-            pass
-        elif self.rot_rep == "euler":
-            rot *= self.dt
-            rot = matrix_to_quaternion(euler_angles_to_matrix(rot, "XYZ"))
-        elif self.rot_rep == "axis_angle":
-            rot *= self.dt
-            rot = axis_angle_to_quaternion(rot)
-        else:
-            raise NotImplementedError
-
-        pred = torch.cat((pos, rot), dim=-1)
         if self.delta_pred == "abs":
-            pred = pose_multiply(pred, pose_inv(poses_obj_cur))
+            pred = pose_multiply(pred, pose_inv(poses_frame_obj_cur))
         elif self.delta_pred == "rel_to_first":
             pass
         elif self.delta_pred == "rel_to_prev":
@@ -206,7 +186,10 @@ class DataConversion:
         poses_base_ee = pose_multiply(poses_base_cam, pred, poses_cam_base, poses_base_ee_cur)
 
         if self.control_mode == "pd_ee_pose":
-            return poses_base_ee
+            p = poses_base_ee[..., :3]
+            q = poses_base_ee[..., 3:]
+            euler = matrix_to_euler_angles(quaternion_to_matrix(q), "XYZ")
+            return torch.cat((p, euler), dim=-1)
         elif self.control_mode == "pd_ee_delta_pose":
             poses_base_eff = torch.cat((poses_base_ee_cur, poses_base_ee), dim=-2)
             p = poses_base_eff[..., :3]
@@ -217,3 +200,91 @@ class DataConversion:
             return torch.cat((delta_p, -euler), dim=-1)
         else:
             raise NotImplementedError
+
+
+    @torch.no_grad()
+    def pred_to_visualize(
+            self,
+            rgb: torch.Tensor,
+            pred: torch.Tensor,
+            intrinsic: Optional[torch.Tensor] = None,
+            poses_cam_obj_cur: Optional[torch.Tensor] = None,
+    ) -> List[np.ndarray]:
+        """
+        Args:
+            rgb: RGB image, tensor of shape (..., 1, C, H, W)
+            pred: nn prediction, tensor of shape (..., T, D)
+            intrinsic: intrinsic matrix, tensor of shape (3, 3)
+            poses_cam_obj_cur: current object poses in camera, tensor of shape (..., 1, 7)
+
+        Returns:
+            tensor of shape (..., T, 6) for "pd_ee_delta_pose", (..., T, 7) for "pd_ee_pose"
+        """
+        assert self.frame in ["camera_first", "camera_cur"]
+        assert pred.ndim == 3
+
+        rgb = rgb.squeeze(dim=-4)
+        dims = list(range(rgb.ndim))
+        rgb = rgb.permute(*dims[:-3], -2, -1, -3)
+        rgb = rgb.cpu().detach().numpy()
+
+        if intrinsic is None:
+            h, w = rgb.shape[-3:-1]
+            h, w = h / 2, w / 2
+            intrinsic = torch.tensor([
+                [w, 0, w],
+                [0, h, h],
+                [0, 0, 1],
+            ])
+
+        pred = self.pred_to_quaternion(pred)
+
+        if self.delta_pred == "abs":
+            poses_cam_obj = pred
+        elif self.delta_pred == "rel_to_first":
+            poses_cam_obj = pose_multiply(pred, poses_cam_obj_cur)
+        elif self.delta_pred == "rel_to_prev":
+            # Delta_1(t) = Delta_2(t) * Delta_2(t-1) * ... * Delta_2(1)
+            t = pred.shape[-2]
+            for i in range(1, t):
+                pred[..., i, :] = pose_multiply(pred[..., i, :], pred[..., i - 1, :])
+            poses_cam_obj = pose_multiply(pred, poses_cam_obj_cur)
+        else:
+            raise NotImplementedError
+
+        poses_cam_obj = torch.cat((poses_cam_obj_cur, poses_cam_obj), dim=-2)
+
+        n, t = poses_cam_obj.shape[:2]
+        images = []
+        for i in range(n):
+            image = rgb[i]
+            for j in range(t):
+                pose = poses_cam_obj[i, j]
+                alpha = (j + 1) / t
+                image = image * (1 - alpha) + visualize_pose(image, pose, intrinsic) * alpha
+            images.append(image.astype(np.uint8))
+
+        return images
+
+    def pred_to_quaternion(self, pred):
+        pos = pred[..., :3]
+        rot = pred[..., 3:]
+
+        if self.rot_rep == "matrix_3x3":
+            # TODO: 如果不满足 RR^T = I,
+            rot = rot.reshape(rot.shape[:-1] + (3, 3))
+            rot = matrix_to_quaternion(rot)
+        elif self.rot_rep == "rotation_6d":
+            rot = matrix_to_quaternion(rotation_6d_to_matrix(rot))
+        elif self.rot_rep == "quaternion":
+            pass
+        elif self.rot_rep == "euler":
+            rot *= self.dt
+            rot = matrix_to_quaternion(euler_angles_to_matrix(rot, "XYZ"))
+        elif self.rot_rep == "axis_angle":
+            rot *= self.dt
+            rot = axis_angle_to_quaternion(rot)
+        else:
+            raise NotImplementedError
+
+        return torch.cat((pos, rot), dim=-1)

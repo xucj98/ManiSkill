@@ -34,6 +34,8 @@ from diffusion_policy.evaluate import evaluate_odpc, evaluate_on_dataset
 
 @dataclass
 class Args:
+    ckpt_path: str
+
     exp_name: Optional[str] = None
     """the name of this experiment"""
     seed: int = 1
@@ -53,8 +55,6 @@ class Args:
 
     env_id: str = "PegInsertionSide-v2"
     """the id of the environment"""
-    demo_path: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
-    """the path of demo dataset, it is expected to be a ManiSkill dataset h5py format file"""
     val_demo_path_ind: str = None
     """the path of in-domain validation dataset"""
     val_demo_path_ood: str = None
@@ -123,17 +123,6 @@ class Args:
     demo_type: Optional[str] = None
 
 
-def save_ckpt(run_name, tag):
-    os.makedirs(f"runs/{run_name}/checkpoints", exist_ok=True)
-    ema.copy_to(ema_agent.parameters())
-    torch.save(
-        {
-            "agent": agent.state_dict(),
-            "ema_agent": ema_agent.state_dict(),
-        },
-        f"runs/{run_name}/checkpoints/{tag}.pt",
-    )
-
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
@@ -144,21 +133,6 @@ if __name__ == "__main__":
     else:
         run_name = args.exp_name
 
-    if args.demo_path.endswith(".h5"):
-        import json
-
-        json_file = args.demo_path[:-2] + "json"
-        with open(json_file, "r") as f:
-            demo_info = json.load(f)
-            if "control_mode" in demo_info["env_info"]["env_kwargs"]:
-                control_mode = demo_info["env_info"]["env_kwargs"]["control_mode"]
-            elif "control_mode" in demo_info["episodes"][0]:
-                control_mode = demo_info["episodes"][0]["control_mode"]
-            else:
-                raise Exception("Control mode not found in json")
-            assert (
-                    control_mode == args.control_mode
-            ), f"Control mode mismatched. Dataset has control mode {control_mode}, but args has control mode {args.control_mode}"
     assert args.obs_horizon + args.act_horizon - 1 <= args.pred_horizon
     assert args.obs_horizon >= 1 and args.act_horizon >= 1 and args.pred_horizon >= 1
 
@@ -224,30 +198,13 @@ if __name__ == "__main__":
             save_code=True,
             group="DiffusionPolicy",
             tags=["diffusion_policy"],
-            job_type="train",
+            job_type="eval",
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s"
         % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-    )
-
-    dataset = ODPCDataset(
-        data_path=args.demo_path,
-        obs_horizon=args.obs_horizon,
-        pred_horizon=args.pred_horizon,
-        num_traj=args.num_demos
-    )
-    sampler = RandomSampler(dataset, replacement=False)
-    batch_sampler = BatchSampler(sampler, batch_size=args.batch_size, drop_last=True)
-    batch_sampler = IterationBasedBatchSampler(batch_sampler, args.total_iters)
-    train_dataloader = DataLoader(
-        dataset,
-        batch_sampler=batch_sampler,
-        num_workers=args.num_dataload_workers,
-        worker_init_fn=lambda worker_id: worker_init_fn(worker_id, base_seed=args.seed),
-        persistent_workers=(args.num_dataload_workers > 0),
     )
 
     val_dataset_ind = val_dataset_ood = None
@@ -271,102 +228,49 @@ if __name__ == "__main__":
     )
 
     agent = ODPCAgent(envs_ind, args, data_conversion.pred_dim).to(device)
+    if os.path.isdir(args.ckpt_path):
+        files = os.listdir(args.ckpt_path)
+        steps = []
+        for file in files:
+            try:
+                step = int(file.split(".")[0])
+                steps.append(step)
+            except ValueError:
+                pass
+        steps.sort()
+        ckpt_paths = {step: os.path.join(args.ckpt_path, f"{step}.pt") for step in steps}
+    else:
+        ckpt_paths = {0: args.ckpt_path}
 
-    optimizer = optim.AdamW(
-        params=agent.parameters(), lr=args.lr, betas=(0.95, 0.999), weight_decay=1e-6
-    )
-
-    lr_scheduler = get_scheduler(
-        name="cosine",
-        optimizer=optimizer,
-        num_warmup_steps=500,
-        num_training_steps=args.total_iters,
-    )
-
-    ema = EMAModel(parameters=agent.parameters(), power=0.75)
-    ema_agent = ODPCAgent(envs_ind, args, data_conversion.pred_dim).to(device)
-
-
-    agent_ind = ODPCAgentWrapper(ema_agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind)
-    agent_ood = ODPCAgentWrapper(ema_agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood)
+    agent_ind = ODPCAgentWrapper(agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind,
+                                 f"runs/{run_name}/videos/ind" if args.capture_video else None)
+    agent_ood = ODPCAgentWrapper(agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood,
+                                 f"runs/{run_name}/videos/ood" if args.capture_video else None)
 
     best_eval_metrics = defaultdict(float)
-    timings = defaultdict(float)
 
+    for step, ckpt_path in ckpt_paths.items():
+        ckpt = torch.load(ckpt_path)
+        agent.load_state_dict(ckpt["ema_agent"])
 
-    # define evaluation and logging functions
-    def evaluate_and_save_best(iteration):
-        if iteration % args.eval_freq == 0:
-            last_tick = time.time()
-            ema.copy_to(ema_agent.parameters())
-            eval_metrics = evaluate_odpc(
-                args.num_eval_episodes, agent_ind, envs_ind, device, args.sim_backend
-            )
-            timings["eval"] += time.time() - last_tick
-
-            print(f"Evaluated {len(eval_metrics['success_at_end'])} episodes")
-            for k in eval_metrics.keys():
-                eval_metrics[k] = np.mean(eval_metrics[k])
-                writer.add_scalar(f"eval/{k}", eval_metrics[k], iteration)
-                print(f"{k}: {eval_metrics[k]:.4f}")
-
-            eval_ood_metrics = evaluate_odpc(
-                args.num_eval_episodes, agent_ood, envs_ood, device, args.sim_backend
-            )
-            for k in eval_ood_metrics.keys():
-                eval_ood_metrics[k] = np.mean(eval_ood_metrics[k])
-                writer.add_scalar(f"eval-ood/{k}", eval_ood_metrics[k], iteration)
-                print(f"{k}: {eval_ood_metrics[k]:.4f}")
-
-            save_on_best_metrics = ["success_once", "success_at_end"]
-            for k in save_on_best_metrics:
-                if k in eval_metrics and eval_metrics[k] > best_eval_metrics[k]:
-                    best_eval_metrics[k] = eval_metrics[k]
-                    save_ckpt(run_name, f"best_eval_{k}")
-                    print(
-                        f"New best {k}_rate: {eval_metrics[k]:.4f}. Saving checkpoint."
-                    )
-    def log_metrics(iteration):
-        if iteration % args.log_freq == 0:
-            writer.add_scalar(
-                "charts/learning_rate", optimizer.param_groups[0]["lr"], iteration
-            )
-            writer.add_scalar("losses/total_loss", total_loss.item(), iteration)
-            for k, v in timings.items():
-                writer.add_scalar(f"time/{k}", v, iteration)
-
-    agent.train()
-    pbar = tqdm(total=args.total_iters)
-
-    for iteration, data_batch in enumerate(train_dataloader):
-        data_batch = common.to_tensor(data_batch, device)
-
-        pred = data_conversion.raw_to_pred(
-            poses_obj=data_batch['poses_peg'],
-            poses_camera_world=data_batch['poses_cam0_world'],
+        eval_metrics = evaluate_odpc(
+            args.num_eval_episodes, agent_ind, envs_ind, device, args.sim_backend
         )
 
-        total_loss = agent.compute_loss(
-            obs_seq=data_batch["observations"],
-            action_seq=pred,
+        print(f"Evaluated {len(eval_metrics['success_at_end'])} episodes")
+        for k in eval_metrics.keys():
+            eval_metrics[k] = np.mean(eval_metrics[k])
+            writer.add_scalar(f"eval/{k}", eval_metrics[k], step)
+            print(f"{k}: {eval_metrics[k]:.4f}")
+
+        eval_ood_metrics = evaluate_odpc(
+            args.num_eval_episodes, agent_ood, envs_ood, device, args.sim_backend
         )
+        for k in eval_ood_metrics.keys():
+            eval_ood_metrics[k] = np.mean(eval_ood_metrics[k])
+            writer.add_scalar(f"eval-ood/{k}", eval_ood_metrics[k], step)
+            print(f"{k}: {eval_ood_metrics[k]:.4f}")
 
-        optimizer.zero_grad()
-        total_loss.backward()
-        optimizer.step()
-        lr_scheduler.step()
-
-        ema.step(agent.parameters())
-
-        # Evaluation
-        evaluate_and_save_best(iteration)
-        log_metrics(iteration)
-
-        if args.save_freq is not None and iteration % args.save_freq == 0:
-            save_ckpt(run_name, str(iteration))
-
-        pbar.update(1)
-        pbar.set_postfix({"loss": total_loss.item()})
 
     envs_ood.close()
     envs_ind.close()

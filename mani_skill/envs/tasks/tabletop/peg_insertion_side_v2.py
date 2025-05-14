@@ -119,7 +119,7 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
 
     def _get_obs_extra(self, info: Dict):
         obs = super()._get_obs_extra(info)
-        ros2opencv = Pose.create_from_pq(q=torch.tensor([0.5, 0.5, -0.5, 0.5]))
+        ros2opencv = Pose.create_from_pq(q=torch.tensor([0.5, 0.5, -0.5, 0.5]), device=self.peg.pose.device)
         cam0_world_pose = ros2opencv * self._sensors["base_camera"].camera.global_pose.inv()
         cam0_peg_pose = cam0_world_pose * self.peg.pose
         obs.update(
