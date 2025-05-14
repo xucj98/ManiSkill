@@ -366,9 +366,9 @@ class ODPCAgentWrapper(nn.Module):
         self.grasp_pose = torch.zeros((envs.num_envs, 7))
         self.reach_pose = torch.zeros((envs.num_envs, 7))
         if "panda" in robot_uid:
-            self.gripper_state = torch.tensor([1., -1.]) # open, close
+            self.gripper_state = torch.tensor([1., -1.])  # open, close
         elif "robotiq" in robot_uid:
-            self.gripper_state = torch.tensor([0., 0.84]) # open, close
+            self.gripper_state = torch.tensor([0., 0.81])  # open, close
         else:
             raise NotImplementedError
 
@@ -444,22 +444,29 @@ class ODPCAgentWrapper(nn.Module):
             self.stages[:] = 1
 
         # get mp_action (motion-planning action)
+        def reach_target(threshold):
+            dp = torch.sum(torch.abs(ee_pose[i, :3] - mp_target_pose[i, :3])).item()
+            dq1 = torch.sum(torch.abs(ee_pose[i, 3:] - mp_target_pose[i, 3:])).item()
+            dq2 = torch.sum(torch.abs(ee_pose[i, 3:] + mp_target_pose[i, 3:])).item()
+            return dp + min(dq1, dq2) < threshold
+
         mp_target_pose = torch.zeros_like(ee_pose)
+
         for i in range(self.num_envs):
             if self.stages[i] == 1:
                 mp_target_pose[i] = self.reach_pose[i]
-                if torch.sum(torch.abs(ee_pose[i] - mp_target_pose[i])) < 0.05:
+                if reach_target(0.05):
                     self.stages[i] = 2
             if self.stages[i] == 2:
                 mp_target_pose[i] = self.grasp_pose[i]
-                if torch.sum(torch.abs(ee_pose[i] - mp_target_pose[i])) < 0.02:
+                if reach_target(0.02):
                     self.stages[i] = 3
             if 3 <= self.stages[i] < 4:
                 mp_target_pose[i] = self.grasp_pose[i]
                 self.stages[i] += 1 / 20
             if 4 <= self.stages[i] < 5:
                 mp_target_pose[i] = self.reach_pose[i]
-                if torch.sum(torch.abs(ee_pose[i] - mp_target_pose[i])) < 0.05:
+                if reach_target(0.05):
                     self.stages[i] = 5
         base_target = pose_multiply(pose_inv(base_pose), mp_target_pose)
         base_ee = pose_multiply(pose_inv(base_pose), ee_pose)

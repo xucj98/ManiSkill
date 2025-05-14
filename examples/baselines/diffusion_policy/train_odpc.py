@@ -106,7 +106,7 @@ class Args:
     """the number of parallel environments to evaluate the agent on"""
     sim_backend: str = "physx_cpu"
     """the simulation backend to use for evaluation environments. can be "cpu" or "gpu"""
-    num_dataload_workers: int = 0
+    num_dataload_workers: int = 8
     """the number of workers to use for loading the training data in the torch dataloader"""
     control_mode: str = "pd_ee_delta_pose"
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
@@ -114,9 +114,9 @@ class Args:
     # Observation process arguments
     depth_clamp: int = 3000
     """Clamp depth value to [0, threshold], depth value beyond threshold will be set to 0."""
-    used_cameras: str = "all"
+    used_cameras: str = "0"
     """Camera used as DP input. Can be camera ids, such as "0", "0,1,2,"."""
-    use_state: bool = True
+    use_state: bool = False
     """Whether to use state as DP input."""
 
     # additional tags/configs for logging purposes to wandb and shared comparisons with other algorithms
@@ -188,7 +188,7 @@ if __name__ == "__main__":
         args.sim_backend,
         env_kwargs,
         other_kwargs,
-        video_dir=f"runs/{run_name}/videos" if args.capture_video else None,
+        video_dir=f"runs/{run_name}/videos/ind" if args.capture_video else None,
         wrappers=[FlattenRGBDObservationWrapper],
     )
     tmp_env = gym.make(args.env_id, **env_kwargs)
@@ -202,7 +202,7 @@ if __name__ == "__main__":
         args.sim_backend,
         env_kwargs,
         other_kwargs,
-        video_dir=f"runs/{run_name}/videos" if args.capture_video else None,
+        video_dir=f"runs/{run_name}/videos/ood" if args.capture_video else None,
         wrappers=[FlattenRGBDObservationWrapper],
     )
     tmp_env = gym.make(args.env_id, **env_kwargs)
@@ -301,9 +301,6 @@ if __name__ == "__main__":
             eval_metrics = evaluate_odpc(
                 args.num_eval_episodes, agent_ind, envs_ind, device, args.sim_backend
             )
-            # other_metrics = evaluate_on_dataset(val_dataset, ema_agent, args, device)
-            # for k, v in other_metrics.items():
-            #     eval_metrics[k] = v
             timings["eval"] += time.time() - last_tick
 
             print(f"Evaluated {len(eval_metrics['success_at_end'])} episodes")
@@ -311,6 +308,14 @@ if __name__ == "__main__":
                 eval_metrics[k] = np.mean(eval_metrics[k])
                 writer.add_scalar(f"eval/{k}", eval_metrics[k], iteration)
                 print(f"{k}: {eval_metrics[k]:.4f}")
+
+            eval_ood_metrics = evaluate_odpc(
+                args.num_eval_episodes, agent_ood, envs_ood, device, args.sim_backend
+            )
+            for k in eval_ood_metrics.keys():
+                eval_ood_metrics[k] = np.mean(eval_ood_metrics[k])
+                writer.add_scalar(f"eval-ood/{k}", eval_ood_metrics[k], iteration)
+                print(f"{k}: {eval_ood_metrics[k]:.4f}")
 
             save_on_best_metrics = ["success_once", "success_at_end"]
             for k in save_on_best_metrics:
@@ -355,6 +360,9 @@ if __name__ == "__main__":
         # Evaluation
         evaluate_and_save_best(iteration)
         log_metrics(iteration)
+
+        if args.save_freq is not None and iteration % args.save_freq == 0:
+            save_ckpt(run_name, str(iteration))
 
         pbar.update(1)
         pbar.set_postfix({"loss": total_loss.item()})
