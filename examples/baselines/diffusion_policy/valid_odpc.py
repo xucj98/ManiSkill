@@ -29,7 +29,7 @@ from diffusion_policy.utils import (IterationBasedBatchSampler,
 from diffusion_policy.data_converison import DataConversion
 from diffusion_policy.odpc_dataset import ODPCDataset
 from diffusion_policy.agent import ODPCAgent, ODPCAgentWrapper
-from diffusion_policy.evaluate import evaluate_odpc, evaluate_on_dataset
+from diffusion_policy.evaluate import evaluate_odpc, evaluate_odpc_on_dataset
 
 
 @dataclass
@@ -110,6 +110,8 @@ class Args:
     """the number of workers to use for loading the training data in the torch dataloader"""
     control_mode: str = "pd_ee_delta_pose"
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
+    use_ema: bool = True
+    """Whether use ema weight."""
 
     # Observation process arguments
     depth_clamp: int = 3000
@@ -213,14 +215,14 @@ if __name__ == "__main__":
             data_path=args.val_demo_path_ind,
             obs_horizon=args.obs_horizon,
             pred_horizon=args.pred_horizon,
-            num_traj=args.num_demos,
+            num_traj=100,
         )
     if args.val_demo_path_ood is not None:
         val_dataset_ood = ODPCDataset(
             data_path=args.val_demo_path_ood,
             obs_horizon=args.obs_horizon,
             pred_horizon=args.pred_horizon,
-            num_traj=args.num_demos,
+            num_traj=100,
         )
 
     data_conversion = DataConversion(
@@ -251,7 +253,10 @@ if __name__ == "__main__":
 
     for step, ckpt_path in ckpt_paths.items():
         ckpt = torch.load(ckpt_path)
-        agent.load_state_dict(ckpt["ema_agent"])
+        if args.use_ema:
+            agent.load_state_dict(ckpt["ema_agent"])
+        else:
+            agent.load_state_dict(ckpt["agent"])
 
         eval_metrics = evaluate_odpc(
             args.num_eval_episodes, agent_ind, envs_ind, device, args.sim_backend
@@ -262,6 +267,19 @@ if __name__ == "__main__":
             eval_metrics[k] = np.mean(eval_metrics[k])
             writer.add_scalar(f"eval/{k}", eval_metrics[k], step)
             print(f"{k}: {eval_metrics[k]:.4f}")
+
+        # if val_dataset_ind is not None:
+        #     other_metrics = evaluate_odpc_on_dataset(
+        #         val_dataset_ind,
+        #         agent,
+        #         data_conversion,
+        #         args,
+        #         device,
+        #         # video_dir=f"runs/{run_name}/videos/ind" if args.capture_video else None,
+        #     )
+        #     for k, v in other_metrics.items():
+        #         writer.add_scalar(f"eval/{k}", v, step)
+        #         print(f"{k}: {v:.4f}")
 
         eval_ood_metrics = evaluate_odpc(
             args.num_eval_episodes, agent_ood, envs_ood, device, args.sim_backend

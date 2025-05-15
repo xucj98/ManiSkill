@@ -209,7 +209,7 @@ class DataConversion:
             pred: torch.Tensor,
             intrinsic: Optional[torch.Tensor] = None,
             poses_cam_obj_cur: Optional[torch.Tensor] = None,
-    ) -> List[np.ndarray]:
+    ) -> np.ndarray:
         """
         Args:
             rgb: RGB image, tensor of shape (..., 1, C, H, W)
@@ -264,7 +264,7 @@ class DataConversion:
                 image = image * (1 - alpha) + visualize_pose(image, pose, intrinsic) * alpha
             images.append(image.astype(np.uint8))
 
-        return images
+        return np.stack(images, 0)
 
     def pred_to_quaternion(self, pred):
         pos = pred[..., :3]
