@@ -290,7 +290,7 @@ class ODPCAgent(nn.Module):
 
         return F.mse_loss(noise_pred, noise)
 
-    def get_action(self, obs_seq):
+    def get_action(self, obs_seq, clip=True):
         # init scheduler
         # self.noise_scheduler.set_timesteps(self.num_diffusion_iters)
         # set_timesteps will change noise_scheduler.timesteps is only used in noise_scheduler.step()
@@ -298,7 +298,7 @@ class ODPCAgent(nn.Module):
         # if we use DDPM, and inference_diffusion_steps == train_diffusion_steps, then we can skip this
 
         # obs_seq['state']: (B, obs_horizon, obs_state_dim)
-        B = obs_seq["state"].shape[0]
+        B = obs_seq["rgb"].shape[0]
         with torch.no_grad():
             if self.include_rgb:
                 obs_seq["rgb"] = obs_seq["rgb"].permute(0, 1, 4, 2, 3)
@@ -311,7 +311,7 @@ class ODPCAgent(nn.Module):
 
             # initialize action from Guassian noise
             noisy_action_seq = torch.randn(
-                (B, self.pred_horizon, self.act_dim), device=obs_seq["state"].device
+                (B, self.pred_horizon, self.act_dim), device=obs_seq["rgb"].device
             )
 
             for k in self.noise_scheduler.timesteps:
@@ -332,7 +332,9 @@ class ODPCAgent(nn.Module):
         # only take act_horizon number of actions
         start = self.obs_horizon - 1
         end = start + self.act_horizon
-        return noisy_action_seq[:, start:end]  # (B, act_horizon, act_dim)
+        if clip:
+            noisy_action_seq = noisy_action_seq[:, start:end]
+        return noisy_action_seq  # (B, act_horizon, act_dim)
 
 
 class ODPCAgentWrapper(nn.Module):
@@ -343,7 +345,7 @@ class ODPCAgentWrapper(nn.Module):
             dc: DataConversion,
             origin_obs_space,
             robot_uid,
-            video_dir = None,
+            video_dir=None,
     ):
         super(ODPCAgentWrapper, self).__init__()
         self.agent: ODPCAgent = agent
@@ -357,7 +359,7 @@ class ODPCAgentWrapper(nn.Module):
 
         self.stages = torch.zeros(envs.num_envs)
         self.action_step = 0
-        self.agent_action = torch.zeros((envs.num_envs, agent.act_horizon, dc.control_dim))
+        self.agent_action = torch.zeros((envs.num_envs, agent.pred_horizon, dc.control_dim))
 
         self.grasp_pose = torch.zeros((envs.num_envs, 7))
         self.reach_pose = torch.zeros((envs.num_envs, 7))
@@ -416,13 +418,25 @@ class ODPCAgentWrapper(nn.Module):
             self.reach_pose[i, :3] = torch.from_numpy(reach_pose.p)
             self.reach_pose[i, 3:] = torch.from_numpy(reach_pose.q)
 
+    @staticmethod
+    def make_grid(images: np.ndarray) -> np.ndarray:
+        n = len(images)
+        nh = int(np.sqrt(n))
+        nw = int(np.ceil(n / nh))
+        h, w = images.shape[1:3]
+        grid = np.zeros((nh * h, nw * w, 3), np.uint8)
+        for i, rgb in enumerate(images):
+            x, y = (i % nh) * h, (i // nh) * w
+            grid[x: x + h, y: y + w] = rgb
+        return grid
+
     def get_action(self, obs_seq):
         _, state_dict = self.state_to_dict(obs_seq["state"], self.origin_obs_space)
         ee_pose = state_dict["extra"]["tcp_pose"][:, 0, :]
         base_pose = state_dict["extra"]["base_pose"][:, 0, :]
 
         if self.action_step % self.act_horizon == 0:
-            pred = self.agent.get_action(obs_seq)
+            pred = self.agent.get_action(obs_seq, clip=False)
             self.agent_action = self.dc.pred_to_control(
                 pred=pred,
                 poses_ee_cur=state_dict["extra"]["tcp_pose"][..., :1, :],
@@ -436,8 +450,8 @@ class ODPCAgentWrapper(nn.Module):
                     pred=pred,
                     poses_cam_obj_cur=state_dict["extra"]["cam0_peg_pose"][..., :1, :],
                 )
-                for i, rgb in enumerate(images):
-                    cv2.imwrite(f"{self.video_dir}/{i}-{self.action_step}.jpg", rgb[:, :, ::-1])
+                grid = self.make_grid(images)
+                cv2.imwrite(f"{self.video_dir}/{self.action_step:04d}.jpg", grid[:, :, ::-1])
 
         if self.stages[0] == 0:
             self.get_grasp_pose(
