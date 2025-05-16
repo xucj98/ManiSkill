@@ -75,22 +75,33 @@ def solve(env: PegInsertionSideEnv, seed=None, debug=False, vis=False):
     # -------------------------------------------------------------------------- #
 
     # align the peg with the hole
+    ee_cur_pose = reach_pose
+
+    # coarse insert pose
+    offset = 0.05 + env.peg_half_sizes[0, 0].item()
+    rand_offset = np.random.uniform(low=-1, high=1, size=(3,)) * [0.03, 0.05, 0.05]
+    coarse_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0]) * rand_offset
+    delta_pose = coarse_insert_pose * env.peg.pose.inv()
+    ee_cur_pose = delta_pose * ee_cur_pose
+    res = planner.move_to_pose_with_screw(ee_cur_pose)
+    if res == -1: return res
+
+    # fine insert pose
     offset = 0.01 + env.peg_half_sizes[0, 0].item()
-    peg_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0])
-    cur_pose  = reach_pose
+    fine_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0])
     # refine the insertion pose
     for _ in range(3):
-        delta_pose = peg_insert_pose * env.peg.pose.inv()
-        cur_pose = delta_pose * cur_pose
-        res = planner.move_to_pose_with_screw(cur_pose)
+        delta_pose = fine_insert_pose * env.peg.pose.inv()
+        ee_cur_pose = delta_pose * ee_cur_pose
+        res = planner.move_to_pose_with_screw(ee_cur_pose)
         if res == -1: return res
 
     # -------------------------------------------------------------------------- #
     # Insert
     # -------------------------------------------------------------------------- #
     delta_pose = env.goal_pose * sapien.Pose([0.03, 0, 0]) * env.peg.pose.inv()
-    insert_pose = delta_pose * cur_pose
-    res = planner.move_to_pose_with_screw(insert_pose)
+    ee_cur_pose = delta_pose * ee_cur_pose
+    res = planner.move_to_pose_with_screw(ee_cur_pose)
     if res == -1: return res
 
     planner.close()
