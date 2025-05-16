@@ -106,10 +106,10 @@ class DataConversion:
             pass
         elif self.rot_rep == "euler":
             rot = matrix_to_euler_angles(quaternion_to_matrix(rot), "XYZ")
-            rot /= self.dt
+            rot = rot / self.dt
         elif self.rot_rep == "axis_angle":
             rot = quaternion_to_axis_angle(rot)
-            rot /= self.dt
+            rot = rot / self.dt
         else:
             raise NotImplementedError
 
@@ -164,6 +164,7 @@ class DataConversion:
         elif self.delta_pred == "rel_to_prev":
             # Delta_1(t) = Delta_2(t) * Delta_2(t-1) * ... * Delta_2(1)
             t = pred.shape[-2]
+            pred = pred.clone()
             for i in range(1, t):
                 pred[..., i, :] = pose_multiply(pred[..., i, :], pred[..., i - 1, :])
         else:
@@ -246,6 +247,7 @@ class DataConversion:
         elif self.delta_pred == "rel_to_prev":
             # Delta_1(t) = Delta_2(t) * Delta_2(t-1) * ... * Delta_2(1)
             t = pred.shape[-2]
+            pred = pred.clone()
             for i in range(1, t):
                 pred[..., i, :] = pose_multiply(pred[..., i, :], pred[..., i - 1, :])
             poses_cam_obj = pose_multiply(pred, poses_cam_obj_cur)
@@ -260,7 +262,7 @@ class DataConversion:
             image = rgb[i]
             for j in range(t):
                 pose = poses_cam_obj[i, j]
-                alpha = (j + 1) / t
+                alpha = (j + 5) / (t + 4)
                 image = image * (1 - alpha) + visualize_pose(image, pose, intrinsic) * alpha
             images.append(image.astype(np.uint8))
 
@@ -279,10 +281,10 @@ class DataConversion:
         elif self.rot_rep == "quaternion":
             pass
         elif self.rot_rep == "euler":
-            rot *= self.dt
+            rot = rot * self.dt
             rot = matrix_to_quaternion(euler_angles_to_matrix(rot, "XYZ"))
         elif self.rot_rep == "axis_angle":
-            rot *= self.dt
+            rot = rot * self.dt
             rot = axis_angle_to_quaternion(rot)
         else:
             raise NotImplementedError

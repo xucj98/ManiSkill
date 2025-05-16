@@ -62,7 +62,7 @@ class Args:
     demo_path: str = (
         "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
     )
-    val_demo_path: str = "demos/PegInsertionSide-v1/trajectory.state.pd_ee_delta_pose.physx_cpu.h5"
+    val_demo_path: str = None
     """the path of demo dataset, it is expected to be a ManiSkill dataset h5py format file"""
     num_demos: Optional[int] = None
     """number of trajectories to load from the demo dataset"""
@@ -369,14 +369,16 @@ if __name__ == "__main__":
         persistent_workers=(args.num_dataload_workers > 0),
     )
 
-    val_dataset = SmallDemoDataset_DiffusionPolicy(
-        data_path=args.val_demo_path,
-        obs_process_fn=obs_process_fn,
-        obs_space=orignal_obs_space,
-        include_rgb=include_rgb,
-        include_depth=include_depth,
-        num_traj=100,
-    )
+    val_dataset = None
+    if args.val_demo_path is not None:
+        val_dataset = SmallDemoDataset_DiffusionPolicy(
+            data_path=args.val_demo_path,
+            obs_process_fn=obs_process_fn,
+            obs_space=orignal_obs_space,
+            include_rgb=include_rgb,
+            include_depth=include_depth,
+            num_traj=100,
+        )
 
     agent = RGBDAgent(envs, args).to(device)
 
@@ -409,9 +411,10 @@ if __name__ == "__main__":
             eval_metrics = evaluate(
                 args.num_eval_episodes, ema_agent, envs, device, args.sim_backend
             )
-            other_metrics = evaluate_on_dataset(val_dataset, ema_agent, args, device)
-            for k, v in other_metrics.items():
-                eval_metrics[k] = v
+            if val_dataset is not None:
+                other_metrics = evaluate_on_dataset(val_dataset, ema_agent, args, device)
+                for k, v in other_metrics.items():
+                    eval_metrics[k] = v
             timings["eval"] += time.time() - last_tick
 
             print(f"Evaluated {len(eval_metrics['success_at_end'])} episodes")

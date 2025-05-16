@@ -110,7 +110,7 @@ class Args:
     """the number of workers to use for loading the training data in the torch dataloader"""
     control_mode: str = "pd_ee_delta_pose"
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
-    use_ema: bool = True
+    use_ema: bool = False
     """Whether use ema weight."""
 
     # Observation process arguments
@@ -123,7 +123,6 @@ class Args:
 
     # additional tags/configs for logging purposes to wandb and shared comparisons with other algorithms
     demo_type: Optional[str] = None
-
 
 
 if __name__ == "__main__":
@@ -245,9 +244,11 @@ if __name__ == "__main__":
         ckpt_paths = {0: args.ckpt_path}
 
     agent_ind = ODPCAgentWrapper(agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind,
-                                 f"runs/{run_name}/videos/ind" if args.capture_video else None)
+                                 f"runs/{run_name}/videos/ind" if args.capture_video else None,
+                                 )
     agent_ood = ODPCAgentWrapper(agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood,
-                                 f"runs/{run_name}/videos/ood" if args.capture_video else None)
+                                 f"runs/{run_name}/videos/ood" if args.capture_video else None,
+                                 )
 
     best_eval_metrics = defaultdict(float)
 
@@ -275,7 +276,7 @@ if __name__ == "__main__":
         #         data_conversion,
         #         args,
         #         device,
-        #         # video_dir=f"runs/{run_name}/videos/ind" if args.capture_video else None,
+        #         video_dir=f"runs/{run_name}/videos/ind" if args.capture_video else None,
         #     )
         #     for k, v in other_metrics.items():
         #         writer.add_scalar(f"eval/{k}", v, step)

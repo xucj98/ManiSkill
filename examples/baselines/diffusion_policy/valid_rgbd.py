@@ -95,7 +95,7 @@ class Args:
     """the number of workers to use for loading the training data in the torch dataloader"""
     control_mode: str = "pd_joint_delta_pos"
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
-    use_ema: bool = True
+    use_ema: bool = False
     """Whether use ema weight."""
 
     # Observation process arguments

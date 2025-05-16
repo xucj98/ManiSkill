@@ -100,7 +100,7 @@ def evaluate_odpc(n: int, agent, eval_envs, device, sim_backend: str, progress_b
         eval_metrics[k] = np.stack(eval_metrics[k])
     return eval_metrics
 
-def evaluate_odpc_on_dataset(dataset, agent, dc, args, device, video_dir):
+def evaluate_odpc_on_dataset(dataset, agent, dc, args, device, video_dir=None):
     agent.eval()
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False)
 
@@ -136,7 +136,8 @@ def evaluate_odpc_on_dataset(dataset, agent, dc, args, device, video_dir):
             )[..., ::-1]
             for i, (img_pred, img_gt) in enumerate(zip(images_pred, images_gt)):
                 cv2.imwrite(f"{video_dir}/{i:04d}.jpg", np.hstack([img_pred, img_gt]))
-
+                cv2.imshow("pred-gt", np.hstack((img_pred, img_gt)))
+                cv2.waitKey(20)
         action = action[..., args.obs_horizon - 1: args.obs_horizon + args.act_horizon - 1, :]
         action_gt = gt[..., args.obs_horizon - 1: args.obs_horizon + args.act_horizon - 1, :]
         se += (action - action_gt).pow(2).sum()

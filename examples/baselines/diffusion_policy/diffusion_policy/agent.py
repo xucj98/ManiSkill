@@ -438,7 +438,7 @@ class ODPCAgentWrapper(nn.Module):
         if self.action_step % self.act_horizon == 0:
             pred = self.agent.get_action(obs_seq, clip=False)
             self.agent_action = self.dc.pred_to_control(
-                pred=pred,
+                pred=pred.clone().detach(),
                 poses_ee_cur=state_dict["extra"]["tcp_pose"][..., :1, :],
                 poses_base=state_dict["extra"]["base_pose"][..., :1, :],
                 poses_camera_world=state_dict["extra"]["cam0_world_pose"][..., :1, :],
@@ -447,7 +447,7 @@ class ODPCAgentWrapper(nn.Module):
             if self.video_dir is not None:
                 images = self.dc.pred_to_visualize(
                     rgb=obs_seq["rgb"][..., :3, :, :],
-                    pred=pred,
+                    pred=pred.clone().detach(),
                     poses_cam_obj_cur=state_dict["extra"]["cam0_peg_pose"][..., :1, :],
                 )
                 grid = self.make_grid(images)
