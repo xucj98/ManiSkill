@@ -243,12 +243,14 @@ if __name__ == "__main__":
     else:
         ckpt_paths = {0: args.ckpt_path}
 
-    agent_ind = ODPCAgentWrapper(agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind,
-                                 f"runs/{run_name}/videos/ind" if args.capture_video else None,
-                                 )
-    agent_ood = ODPCAgentWrapper(agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood,
-                                 f"runs/{run_name}/videos/ood" if args.capture_video else None,
-                                 )
+    agent_ind = ODPCAgentWrapper(
+        agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind,
+        # f"runs/{run_name}/videos/ind" if args.capture_video else None,
+    )
+    agent_ood = ODPCAgentWrapper(
+        agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood,
+        # f"runs/{run_name}/videos/ood" if args.capture_video else None,
+    )
 
     best_eval_metrics = defaultdict(float)
 
@@ -259,6 +261,7 @@ if __name__ == "__main__":
         else:
             agent.load_state_dict(ckpt["agent"])
 
+        eval_metrics = {}
         eval_metrics = evaluate_odpc(
             args.num_eval_episodes, agent_ind, envs_ind, device, args.sim_backend
         )
@@ -267,20 +270,16 @@ if __name__ == "__main__":
         for k in eval_metrics.keys():
             eval_metrics[k] = np.mean(eval_metrics[k])
             writer.add_scalar(f"eval/{k}", eval_metrics[k], step)
-            print(f"{k}: {eval_metrics[k]:.4f}")
+            print(f"ind/{k}: {eval_metrics[k]:.4f}")
 
-        # if val_dataset_ind is not None:
-        #     other_metrics = evaluate_odpc_on_dataset(
-        #         val_dataset_ind,
-        #         agent,
-        #         data_conversion,
-        #         args,
-        #         device,
-        #         video_dir=f"runs/{run_name}/videos/ind" if args.capture_video else None,
-        #     )
-        #     for k, v in other_metrics.items():
-        #         writer.add_scalar(f"eval/{k}", v, step)
-        #         print(f"{k}: {v:.4f}")
+        if val_dataset_ind is not None:
+            other_metrics = evaluate_odpc_on_dataset(
+                val_dataset_ind, agent, data_conversion, args, device,
+                # video_dir=f"runs/{run_name}/videos/ind" if args.capture_video else None,
+            )
+            for k, v in other_metrics.items():
+                writer.add_scalar(f"eval/{k}", v, step)
+                print(f"ind/{k}: {v:.4f}")
 
         eval_ood_metrics = evaluate_odpc(
             args.num_eval_episodes, agent_ood, envs_ood, device, args.sim_backend
@@ -288,7 +287,16 @@ if __name__ == "__main__":
         for k in eval_ood_metrics.keys():
             eval_ood_metrics[k] = np.mean(eval_ood_metrics[k])
             writer.add_scalar(f"eval-ood/{k}", eval_ood_metrics[k], step)
-            print(f"{k}: {eval_ood_metrics[k]:.4f}")
+            print(f"ood/{k}: {eval_ood_metrics[k]:.4f}")
+
+        if val_dataset_ood is not None:
+            other_metrics = evaluate_odpc_on_dataset(
+                val_dataset_ood, agent, data_conversion, args, device,
+                # video_dir=f"runs/{run_name}/videos/ood" if args.capture_video else None,
+            )
+            for k, v in other_metrics.items():
+                writer.add_scalar(f"eval-ood/{k}", v, step)
+                print(f"ood/{k}: {v:.4f}")
 
 
     envs_ood.close()

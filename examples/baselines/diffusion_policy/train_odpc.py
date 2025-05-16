@@ -29,7 +29,7 @@ from diffusion_policy.utils import (IterationBasedBatchSampler,
 from diffusion_policy.data_converison import DataConversion
 from diffusion_policy.odpc_dataset import ODPCDataset
 from diffusion_policy.agent import ODPCAgent, ODPCAgentWrapper
-from diffusion_policy.evaluate import evaluate_odpc, evaluate_on_dataset
+from diffusion_policy.evaluate import evaluate_odpc, evaluate_odpc_on_dataset
 
 
 @dataclass
@@ -123,18 +123,6 @@ class Args:
     demo_type: Optional[str] = None
 
 
-def save_ckpt(run_name, tag):
-    os.makedirs(f"runs/{run_name}/checkpoints", exist_ok=True)
-    ema.copy_to(ema_agent.parameters())
-    torch.save(
-        {
-            "agent": agent.state_dict(),
-            "ema_agent": ema_agent.state_dict(),
-        },
-        f"runs/{run_name}/checkpoints/{tag}.pt",
-    )
-
-
 if __name__ == "__main__":
     args = tyro.cli(Args)
 
@@ -144,21 +132,6 @@ if __name__ == "__main__":
     else:
         run_name = args.exp_name
 
-    if args.demo_path.endswith(".h5"):
-        import json
-
-        json_file = args.demo_path[:-2] + "json"
-        with open(json_file, "r") as f:
-            demo_info = json.load(f)
-            if "control_mode" in demo_info["env_info"]["env_kwargs"]:
-                control_mode = demo_info["env_info"]["env_kwargs"]["control_mode"]
-            elif "control_mode" in demo_info["episodes"][0]:
-                control_mode = demo_info["episodes"][0]["control_mode"]
-            else:
-                raise Exception("Control mode not found in json")
-            assert (
-                    control_mode == args.control_mode
-            ), f"Control mode mismatched. Dataset has control mode {control_mode}, but args has control mode {args.control_mode}"
     assert args.obs_horizon + args.act_horizon - 1 <= args.pred_horizon
     assert args.obs_horizon >= 1 and args.act_horizon >= 1 and args.pred_horizon >= 1
 
@@ -256,14 +229,14 @@ if __name__ == "__main__":
             data_path=args.val_demo_path_ind,
             obs_horizon=args.obs_horizon,
             pred_horizon=args.pred_horizon,
-            num_traj=args.num_demos,
+            num_traj=100,
         )
     if args.val_demo_path_ood is not None:
         val_dataset_ood = ODPCDataset(
             data_path=args.val_demo_path_ood,
             obs_horizon=args.obs_horizon,
             pred_horizon=args.pred_horizon,
-            num_traj=args.num_demos,
+            num_traj=100,
         )
 
     data_conversion = DataConversion(
@@ -286,7 +259,6 @@ if __name__ == "__main__":
     ema = EMAModel(parameters=agent.parameters(), power=0.75)
     ema_agent = ODPCAgent(envs_ind, args, data_conversion.pred_dim).to(device)
 
-
     agent_ind = ODPCAgentWrapper(ema_agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind)
     agent_ood = ODPCAgentWrapper(ema_agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood)
 
@@ -294,21 +266,47 @@ if __name__ == "__main__":
     timings = defaultdict(float)
 
 
+    def copy_agent_buffer():
+        for ema_buffer, source_buffer in zip(ema_agent.buffers(), agent.buffers()):
+            ema_buffer.data.copy_(source_buffer.data)
+
+
+    def save_ckpt(run_name, tag):
+        os.makedirs(f"runs/{run_name}/checkpoints", exist_ok=True)
+        ema.copy_to(ema_agent.parameters())
+        copy_agent_buffer()
+        torch.save(
+            {
+                "agent": agent.state_dict(),
+                "ema_agent": ema_agent.state_dict(),
+            },
+            f"runs/{run_name}/checkpoints/{tag}.pt",
+        )
+
+
     # define evaluation and logging functions
     def evaluate_and_save_best(iteration):
         if iteration % args.eval_freq == 0:
             last_tick = time.time()
             ema.copy_to(ema_agent.parameters())
+            copy_agent_buffer()
+
             eval_metrics = evaluate_odpc(
                 args.num_eval_episodes, agent_ind, envs_ind, device, args.sim_backend
             )
-            timings["eval"] += time.time() - last_tick
-
             print(f"Evaluated {len(eval_metrics['success_at_end'])} episodes")
             for k in eval_metrics.keys():
                 eval_metrics[k] = np.mean(eval_metrics[k])
                 writer.add_scalar(f"eval/{k}", eval_metrics[k], iteration)
-                print(f"{k}: {eval_metrics[k]:.4f}")
+                print(f"ind/{k}: {eval_metrics[k]:.4f}")
+
+            if val_dataset_ind is not None:
+                other_metrics = evaluate_odpc_on_dataset(
+                    val_dataset_ind, agent, data_conversion, args, device,
+                )
+                for k, v in other_metrics.items():
+                    writer.add_scalar(f"eval/{k}", v, iteration)
+                    print(f"ind/{k}: {v:.4f}")
 
             eval_ood_metrics = evaluate_odpc(
                 args.num_eval_episodes, agent_ood, envs_ood, device, args.sim_backend
@@ -316,8 +314,17 @@ if __name__ == "__main__":
             for k in eval_ood_metrics.keys():
                 eval_ood_metrics[k] = np.mean(eval_ood_metrics[k])
                 writer.add_scalar(f"eval-ood/{k}", eval_ood_metrics[k], iteration)
-                print(f"{k}: {eval_ood_metrics[k]:.4f}")
+                print(f"ood/{k}: {eval_ood_metrics[k]:.4f}")
 
+            if val_dataset_ood is not None:
+                other_ood_metrics = evaluate_odpc_on_dataset(
+                    val_dataset_ind, agent, data_conversion, args, device,
+                )
+                for k, v in other_ood_metrics.items():
+                    writer.add_scalar(f"eval-ood/{k}", v, iteration)
+                    print(f"ood/{k}: {v:.4f}")
+
+            timings["eval"] += time.time() - last_tick
             save_on_best_metrics = ["success_once", "success_at_end"]
             for k in save_on_best_metrics:
                 if k in eval_metrics and eval_metrics[k] > best_eval_metrics[k]:
@@ -326,6 +333,8 @@ if __name__ == "__main__":
                     print(
                         f"New best {k}_rate: {eval_metrics[k]:.4f}. Saving checkpoint."
                     )
+
+
     def log_metrics(iteration):
         if iteration % args.log_freq == 0:
             writer.add_scalar(
@@ -334,6 +343,7 @@ if __name__ == "__main__":
             writer.add_scalar("losses/total_loss", total_loss.item(), iteration)
             for k, v in timings.items():
                 writer.add_scalar(f"time/{k}", v, iteration)
+
 
     agent.train()
     pbar = tqdm(total=args.total_iters)

@@ -79,7 +79,7 @@ def solve(env: PegInsertionSideEnv, seed=None, debug=False, vis=False):
 
     # coarse insert pose
     offset = 0.05 + env.peg_half_sizes[0, 0].item()
-    rand_offset = np.random.uniform(low=-1, high=1, size=(3,)) * [0.03, 0.05, 0.05]
+    rand_offset = np.random.uniform(low=-1, high=1, size=(3,)) * [0.02, 0.05, 0.05]
     coarse_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0]) * rand_offset
     delta_pose = coarse_insert_pose * env.peg.pose.inv()
     ee_cur_pose = delta_pose * ee_cur_pose
