@@ -347,6 +347,7 @@ def visualize_pose(
             z_axis_2d = tuple(projected_points_2d[3])
             cv2.line(output_img_rgb, origin_2d, z_axis_2d, colors["z"], thickness)
     else:
-        print("Warning: Object origin is behind or too close to the camera. Axes not drawn.")
+        # print("Warning: Object origin is behind or too close to the camera. Axes not drawn.")
+        pass
 
     return output_img_rgb

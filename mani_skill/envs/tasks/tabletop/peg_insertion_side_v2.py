@@ -46,8 +46,10 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
             self,
             *args,
             robot_uids="panda",
+            camera_mode="fixed",  # fixed, random, move
             **kwargs,
     ):
+        self.camera_mode = camera_mode
         super().__init__(*args, robot_uids=robot_uids, **kwargs)
 
     def _load_scene(self, options: dict):
@@ -56,18 +58,22 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
 
     @property
     def _default_sensor_configs(self):
-        eye = np.random.uniform(low=[0.4, -0.4, 0.5], high=[0.7, -0.2, 1.0])
-        target = np.random.uniform(low=[-0.1, 0, 0], high=[0.1, 0.3, 0.6 * eye[2]])
-        pose = sapien_utils.look_at(eye, target)
+        if self.camera_mode == "fixed":
+            pose = sapien_utils.look_at([0.4, -0.4, 0.4], [0.05, -0.1, 0.2])
+        elif self.camera_mode == "random":
+            eye = np.random.uniform(low=[0.4, -0.4, 0.5], high=[0.7, -0.2, 0.8], size=(self.num_envs, 3))
+            eye = torch.from_numpy(eye).float().to(device=self.device)
+
+            target = np.random.uniform(low=[-0.1, 0, 0], high=[0.1, 0.3, 0.6], size=(self.num_envs, 3))
+            target = torch.from_numpy(target).float().to(device=self.device)
+            target[:, 2] *= eye[:, 2]
+
+            pose = sapien_utils.look_at(eye, target, device=self.device)
+
+        elif self.camera_mode == "move":
+            raise NotImplementedError()
+
         return [CameraConfig("base_camera", pose, 256, 256, np.pi / 2, 0.01, 100)]
-
-    @property
-    def _default_human_render_camera_configs(self):
-        eye = np.random.uniform(low=[0.4, -0.4, 0.5], high=[0.7, -0.2, 1.0])
-        target = np.random.uniform(low=[-0.1, 0, 0], high=[0.1, 0.3, 0.6 * eye[2]])
-        pose = sapien_utils.look_at(eye, target)
-        return CameraConfig("render_camera", pose, 512, 512, 1, 0.01, 100)
-
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         with torch.device(self.device):

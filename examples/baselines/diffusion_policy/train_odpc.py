@@ -110,6 +110,8 @@ class Args:
     """the number of workers to use for loading the training data in the torch dataloader"""
     control_mode: str = "pd_ee_delta_pose"
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
+    camera_mode: str = "fixed"
+    """camera mode, can be fixed, random, move."""
 
     # Observation process arguments
     depth_clamp: int = 3000
@@ -151,6 +153,7 @@ if __name__ == "__main__":
         human_render_camera_configs=dict(shader_pack="default"),
         sensor_configs=dict(shader_pack="default"),
         robot_uids=args.robot_ind,
+        camera_mode=args.camera_mode,
     )
     assert args.max_episode_steps != None, "max_episode_steps must be specified as imitation learning algorithms task solve speed is dependent on the data you train on"
     env_kwargs["max_episode_steps"] = args.max_episode_steps
@@ -259,8 +262,14 @@ if __name__ == "__main__":
     ema = EMAModel(parameters=agent.parameters(), power=0.75)
     ema_agent = ODPCAgent(envs_ind, args, data_conversion.pred_dim).to(device)
 
-    agent_ind = ODPCAgentWrapper(ema_agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind)
-    agent_ood = ODPCAgentWrapper(ema_agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood)
+    agent_ind = ODPCAgentWrapper(
+        ema_agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind,
+        f"runs/{run_name}/videos/ind" if args.capture_video else None,
+    )
+    agent_ood = ODPCAgentWrapper(
+        ema_agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood,
+        f"runs/{run_name}/videos/ood" if args.capture_video else None,
+    )
 
     best_eval_metrics = defaultdict(float)
     timings = defaultdict(float)
@@ -318,7 +327,7 @@ if __name__ == "__main__":
 
             if val_dataset_ood is not None:
                 other_ood_metrics = evaluate_odpc_on_dataset(
-                    val_dataset_ind, agent, data_conversion, args, device,
+                    val_dataset_ood, agent, data_conversion, args, device,
                 )
                 for k, v in other_ood_metrics.items():
                     writer.add_scalar(f"eval-ood/{k}", v, iteration)

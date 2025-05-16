@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 import sapien
@@ -356,6 +357,9 @@ class ODPCAgentWrapper(nn.Module):
         self.act_horizon = agent.act_horizon
         self.control_mode = dc.control_mode
         self.video_dir = video_dir
+
+        if video_dir is not None:
+            os.makedirs(video_dir, exist_ok=True)
 
         self.stages = torch.zeros(envs.num_envs)
         self.action_step = 0
