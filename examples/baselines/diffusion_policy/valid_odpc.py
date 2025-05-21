@@ -61,7 +61,7 @@ class Args:
     """the path of out-domain validation dataset"""
     robot_ind: str = "panda_peg_insertion"
     """in-domain robot"""
-    robot_ood: str = "xarm6_robotiq"
+    robot_ood: str = None
     """out-domain robot"""
 
     num_demos: Optional[int] = None
@@ -108,10 +108,12 @@ class Args:
     """the simulation backend to use for evaluation environments. can be "cpu" or "gpu"""
     num_dataload_workers: int = 8
     """the number of workers to use for loading the training data in the torch dataloader"""
-    control_mode: str = "pd_ee_delta_pose"
+    control_mode: str = "pd_ee_pose"
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
     use_ema: bool = False
     """Whether use ema weight."""
+    camera_mode: str = "fixed"
+    """camera mode, can be fixed, random, move."""
 
     # Observation process arguments
     depth_clamp: int = 3000
@@ -153,6 +155,7 @@ if __name__ == "__main__":
         human_render_camera_configs=dict(shader_pack="default"),
         sensor_configs=dict(shader_pack="default"),
         robot_uids=args.robot_ind,
+        camera_mode=args.camera_mode,
     )
     assert args.max_episode_steps != None, "max_episode_steps must be specified as imitation learning algorithms task solve speed is dependent on the data you train on"
     env_kwargs["max_episode_steps"] = args.max_episode_steps
@@ -170,19 +173,21 @@ if __name__ == "__main__":
     obs_space_ind = tmp_env.observation_space
     tmp_env.close()
 
-    env_kwargs['robot_uids'] = args.robot_ood
-    envs_ood = make_eval_envs(
-        args.env_id,
-        args.num_eval_envs,
-        args.sim_backend,
-        env_kwargs,
-        other_kwargs,
-        video_dir=f"runs/{run_name}/videos/ood" if args.capture_video else None,
-        wrappers=[FlattenRGBDObservationWrapper],
-    )
-    tmp_env = gym.make(args.env_id, **env_kwargs)
-    obs_space_ood = tmp_env.observation_space
-    tmp_env.close()
+    envs_ood = None
+    if args.robot_ood is not None:
+        env_kwargs['robot_uids'] = args.robot_ood
+        envs_ood = make_eval_envs(
+            args.env_id,
+            args.num_eval_envs,
+            args.sim_backend,
+            env_kwargs,
+            other_kwargs,
+            video_dir=f"runs/{run_name}/videos/ood" if args.capture_video else None,
+            wrappers=[FlattenRGBDObservationWrapper],
+        )
+        tmp_env = gym.make(args.env_id, **env_kwargs)
+        obs_space_ood = tmp_env.observation_space
+        tmp_env.close()
 
     if args.track:
         import wandb
@@ -247,10 +252,12 @@ if __name__ == "__main__":
         agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind,
         # f"runs/{run_name}/videos/ind" if args.capture_video else None,
     )
-    agent_ood = ODPCAgentWrapper(
-        agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood,
-        # f"runs/{run_name}/videos/ood" if args.capture_video else None,
-    )
+    agent_ood = None
+    if args.robot_ood is not None:
+        agent_ood = ODPCAgentWrapper(
+            agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood,
+            # f"runs/{run_name}/videos/ood" if args.capture_video else None,
+        )
 
     best_eval_metrics = defaultdict(float)
 
@@ -281,13 +288,14 @@ if __name__ == "__main__":
                 writer.add_scalar(f"eval/{k}", v, step)
                 print(f"ind/{k}: {v:.4f}")
 
-        eval_ood_metrics = evaluate_odpc(
-            args.num_eval_episodes, agent_ood, envs_ood, device, args.sim_backend
-        )
-        for k in eval_ood_metrics.keys():
-            eval_ood_metrics[k] = np.mean(eval_ood_metrics[k])
-            writer.add_scalar(f"eval-ood/{k}", eval_ood_metrics[k], step)
-            print(f"ood/{k}: {eval_ood_metrics[k]:.4f}")
+        if args.robot_ood is not None:
+            eval_ood_metrics = evaluate_odpc(
+                args.num_eval_episodes, agent_ood, envs_ood, device, args.sim_backend
+            )
+            for k in eval_ood_metrics.keys():
+                eval_ood_metrics[k] = np.mean(eval_ood_metrics[k])
+                writer.add_scalar(f"eval-ood/{k}", eval_ood_metrics[k], step)
+                print(f"ood/{k}: {eval_ood_metrics[k]:.4f}")
 
         if val_dataset_ood is not None:
             other_metrics = evaluate_odpc_on_dataset(
@@ -298,7 +306,7 @@ if __name__ == "__main__":
                 writer.add_scalar(f"eval-ood/{k}", v, step)
                 print(f"ood/{k}: {v:.4f}")
 
-
-    envs_ood.close()
+    if envs_ood is not None:
+        envs_ood.close()
     envs_ind.close()
     writer.close()
