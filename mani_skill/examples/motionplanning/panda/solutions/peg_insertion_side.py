@@ -51,7 +51,8 @@ def solve(env: PegInsertionSideEnv, seed=None, debug=False, vis=False):
     )
     closing, center = grasp_info["closing"], grasp_info["center"]
     grasp_pose = env.agent.build_grasp_pose(approaching, closing, center)
-    offset = np.random.uniform(0.05, env.peg_half_sizes[0, 0].item() - 0.01)
+    offset = max(0.05, env.peg_half_sizes[0, 0].item() / 2 + 0.01)
+    # offset = np.random.uniform(0.05, env.peg_half_sizes[0, 0].item() - 0.01)
     grasp_pose.p = (env.peg.pose * sapien.Pose([-offset, 0, 0])).p[0]
 
     # -------------------------------------------------------------------------- #
@@ -78,13 +79,13 @@ def solve(env: PegInsertionSideEnv, seed=None, debug=False, vis=False):
     ee_cur_pose = reach_pose
 
     # coarse insert pose
-    offset = 0.05 + env.peg_half_sizes[0, 0].item()
-    rand_offset = np.random.uniform(low=-1, high=1, size=(3,)) * [0.02, 0.05, 0.05]
-    coarse_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0]) * rand_offset
-    delta_pose = coarse_insert_pose * env.peg.pose.inv()
-    ee_cur_pose = delta_pose * ee_cur_pose
-    res = planner.move_to_pose_with_screw(ee_cur_pose)
-    if res == -1: return res
+    # offset = 0.05 + env.peg_half_sizes[0, 0].item()
+    # rand_offset = np.random.uniform(low=-1, high=1, size=(3,)) * [0.02, 0.05, 0.05]
+    # coarse_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0])
+    # delta_pose = coarse_insert_pose * env.peg.pose.inv()
+    # ee_cur_pose = delta_pose * ee_cur_pose
+    # res = planner.move_to_pose_with_screw(ee_cur_pose)
+    # if res == -1: return res
 
     # fine insert pose
     offset = 0.01 + env.peg_half_sizes[0, 0].item()

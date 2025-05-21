@@ -110,7 +110,7 @@ class Args:
     """the number of workers to use for loading the training data in the torch dataloader"""
     control_mode: str = "pd_ee_delta_pose"
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
-    camera_mode: str = "fixed"
+    camera_mode: str = "fixed-2"
     """camera mode, can be fixed, random, move."""
 
     # Observation process arguments
@@ -264,11 +264,11 @@ if __name__ == "__main__":
 
     agent_ind = ODPCAgentWrapper(
         ema_agent, envs_ind, data_conversion, obs_space_ind, args.robot_ind,
-        f"runs/{run_name}/videos/ind" if args.capture_video else None,
+        # f"runs/{run_name}/videos/ind" if args.capture_video else None,
     )
     agent_ood = ODPCAgentWrapper(
         ema_agent, envs_ood, data_conversion, obs_space_ood, args.robot_ood,
-        f"runs/{run_name}/videos/ood" if args.capture_video else None,
+        # f"runs/{run_name}/videos/ood" if args.capture_video else None,
     )
 
     best_eval_metrics = defaultdict(float)

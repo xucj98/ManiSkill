@@ -112,7 +112,7 @@ class Args:
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
     use_ema: bool = False
     """Whether use ema weight."""
-    camera_mode: str = "fixed"
+    camera_mode: str = "fixed-2"
     """camera mode, can be fixed, random, move."""
 
     # Observation process arguments
