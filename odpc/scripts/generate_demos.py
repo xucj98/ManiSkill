@@ -36,7 +36,7 @@ class MotionPlanningArgs:
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="configs/data/peg_insertion_demo.yaml")
+    parser.add_argument("--config", type=str, default="configs/demo/peg_insertion_demo.yaml")
     return parser.parse_args()
 
 

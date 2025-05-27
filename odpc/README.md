@@ -103,7 +103,7 @@ pip install -r requirements.txt
 
 2. **生成演示数据**
 ```bash
-python scripts/generate_demos.py --config configs/dataset/demo_generation.yaml
+python scripts/generate_demos.py --config configs/demo/peg_insertion.yaml
 ```
 
 3. **训练模型**

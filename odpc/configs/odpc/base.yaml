@@ -1,0 +1,88 @@
+exp_name: "odpc"
+seed: 42
+obs_horizon: 1
+act_horizon: 8
+pred_horizon: 16
+
+torch_deterministic: true
+track: false
+wandb_project_name: "ManiSkill"
+wandb_entity: none
+
+obs_mode: state_dict+rgb+depth+segmentation
+control_mode: pd_ee_pose
+
+trainer:
+  total_iters: 400000
+  batch_size: 256
+  save_freq: 40000
+  eval_freq: 40000
+  log_freq: 1000
+  num_dataload_workers: 8
+
+train_dataset:
+  _target_: odpc.data.odpc_dataset.ODPCDataset
+  data_path: peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  num_traj: 100
+
+valid_dataset:
+  _target_: odpc.data.odpc_dataset.ODPCDataset
+  data_path: peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  num_traj: 10
+
+valid_env:
+  env_id: PegInsertionSide-v2
+  num_eval_envs: 10
+  sim_backend: cuda
+  env_kwargs:
+    obs_mode: ${obs_mode}
+    control_mode: ${control_mode}
+    reward_mode: sparse
+    render_mode: rgb_array
+    human_render_camera_configs:
+      shader_pack: default
+    sensor_configs:
+      shader_pack: default
+    robot_uids: panda
+    camera_mode: fixed
+    max_episode_steps: 300
+
+model:
+  _target_: odpc.models.odpc.ODPCModel
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  output_dim: 6
+  visual_encoder_config:
+    _target_: odpc.models.visual_encoder.Resnet18Encoder
+    in_channels: 4
+    out_dim: 256
+  noise_pred_net_config:
+    _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
+    input_dim: ${model.output_dim}
+    global_cond_dim: 256
+    diffusion_step_embed_dim: 64
+    down_dims: [64, 128, 256]
+    n_groups: 8
+  noise_scheduler_config:
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+    num_train_timesteps: 1000
+    beta_schedule: "squaredcos_cap_v2"
+    clip_sample: true
+    prediction_type: "epsilon"
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-4
+  betas: [0.95, 0.999]
+  weight_decay: 1e-6
+
+lr_scheduler:
+  _target_: diffusers.optimization.get_scheduler
+  name: cosine
+  num_warmup_steps: 500
+  num_training_steps: ${trainer.total_iters}
+

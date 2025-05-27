@@ -46,7 +46,7 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
             self,
             *args,
             robot_uids="panda",
-            camera_mode="fixed-2",  # fixed, random, move
+            camera_mode="fixed",  # fixed, random, move
             **kwargs,
     ):
         self.camera_mode = camera_mode
