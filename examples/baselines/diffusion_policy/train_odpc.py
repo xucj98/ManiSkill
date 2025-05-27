@@ -390,3 +390,7 @@ if __name__ == "__main__":
     envs_ood.close()
     envs_ind.close()
     writer.close()
+
+"""
+CUDA_VISIBLE_DEVICES=1, python train_odpc.py --exp-name odpc-PegInsV2-rand_ins --env-id PegInsertionSide-v2 --demo-path ./demo/demo1k-rand_ins.state_dict+rgb+depth.pd_ee_delta_pose.physx_cpu.h5 --val-demo-path-ind ./demo/val100-rand_ins.state_dict+rgb+depth.pd_joint_pos.physx_cpu.h5 --val-demo-path-ood ./demo/val100-rand_ins-xarm6.state_dict+rgb+depth.pd_joint_pos.physx_cpu.h5 --total-iters 400_000 --obs-horizon 1 --save-freq 40_000 --eval-freq 40_000 --num-dataload-workers 8 --control-mode pd_ee_pose --max-episode-steps 300 --no-use-state --used-cameras 0 --num-eval-envs 16 --num-eval-episodes 16 --sim-backend cuda
+"""

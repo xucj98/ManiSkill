@@ -60,7 +60,7 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
     def _default_sensor_configs(self):
         if self.camera_mode == "fixed":
             pose = sapien_utils.look_at([0.4, -0.4, 0.4], [0.05, -0.1, 0.2])
-        if self.camera_mode == "fixed-2":
+        elif self.camera_mode == "fixed-2":
             pose = sapien_utils.look_at([0.5, -0.5, 0.1], [0., 0., 0.1])
         elif self.camera_mode == "random":
             eye = np.random.uniform(low=[0.4, -0.4, 0.5], high=[0.7, -0.2, 0.8], size=(self.num_envs, 3))
@@ -73,6 +73,8 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
             pose = sapien_utils.look_at(eye, target, device=self.device)
 
         elif self.camera_mode == "move":
+            raise NotImplementedError()
+        else:
             raise NotImplementedError()
 
         return [CameraConfig("base_camera", pose, 256, 256, np.pi / 2, 0.01, 100)]

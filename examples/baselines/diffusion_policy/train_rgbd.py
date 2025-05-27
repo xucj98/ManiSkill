@@ -146,7 +146,7 @@ class SmallDemoDataset_DiffusionPolicy(Dataset):
         with h5py.File(self.data_path, "r") as file:
             keys = list(file.keys())
             if num_traj is not None:
-                assert num_traj <= len(keys), f"num_traj: {num_traj} > len(keys): {len(keys)}"
+                # assert num_traj <= len(keys), f"num_traj: {num_traj} > len(keys): {len(keys)}"
                 keys = sorted(keys, key=lambda x: int(x.split("_")[-1]))
                 keys = keys[:num_traj]
             self.traj_keys = keys
