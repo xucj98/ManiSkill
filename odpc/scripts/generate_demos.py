@@ -3,13 +3,19 @@ import shutil
 import argparse
 import multiprocessing as mp
 from omegaconf import OmegaConf
-from odpc.configs.paths import *
 from dataclasses import dataclass
 
 from mani_skill.examples.motionplanning.panda.run import main as panda_motion_planning
-from mani_skill.examples.motionplanning.xarm6.run import main as xarm6_motion_planning
+from mani_skill.examples.motionplanning.panda.run import MP_SOLUTIONS as PANDA_MP_SOLUTIONS
+# from mani_skill.examples.motionplanning.xarm6.run import main as xarm6_motion_planning
 from mani_skill.trajectory.replay_trajectory import main as replay_trajectory
 from mani_skill.trajectory.replay_trajectory import Args as ReplayTrajectoryArgs
+
+from odpc.configs.paths import *
+import odpc.envs
+import odpc.data.demo.panda_solutions as panda_solutions
+
+PANDA_MP_SOLUTIONS["PegInsertionSide-v2"] = panda_solutions.solvePegInsertionSide
 
 @dataclass
 class MotionPlanningArgs:
