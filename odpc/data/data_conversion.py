@@ -10,9 +10,9 @@ from mani_skill.utils.geometry.rotation_conversions import (
     rotation_6d_to_matrix, matrix_to_rotation_6d,
     axis_angle_to_quaternion, quaternion_to_axis_angle,
 )
-from diffusion_policy.utils import visualize_pose
 
 from odpc.utils.math import pose_inv, pose_multiply
+from odpc.utils.visualize import visualize_pose
 
 Frame = Literal["camera_first", "camera_cur", "world"]
 RotationRepresentation = Literal["matrix_3x3", "rotation_6d", "quaternion", "euler", "axis_angle", "se3"]
@@ -249,11 +249,11 @@ class DataConversion:
         if intrinsic is None:
             h, w = rgb.shape[-3:-1]
             h, w = h / 2, w / 2
-            intrinsic = torch.tensor([
+            intrinsic = np.array([
                 [w, 0, w],
                 [0, h, h],
                 [0, 0, 1],
-            ])
+            ], dtype=np.float32)
 
         pred = self.pred_to_quaternion(pred)
 
@@ -272,6 +272,7 @@ class DataConversion:
             raise NotImplementedError
 
         poses_cam_obj = torch.cat((poses_cam_obj_cur, poses_cam_obj), dim=-2)
+        poses_cam_obj = poses_cam_obj.cpu().numpy()
 
         n, t = poses_cam_obj.shape[:2]
         images = []
