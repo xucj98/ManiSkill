@@ -7,7 +7,7 @@ pred_horizon: 16
 torch_deterministic: true
 track: false
 wandb_project_name: "ManiSkill"
-wandb_entity: none
+wandb_entity: null
 
 obs_mode: state_dict+rgb+depth+segmentation
 control_mode: pd_ee_pose
