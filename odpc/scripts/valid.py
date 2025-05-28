@@ -124,12 +124,7 @@ if __name__ == "__main__":
             model.load_state_dict(ckpt["agent"])
 
         eval_metrics = evaluate_on_env(
-            args.num_eval_episodes,
-            agent,
-            envs,
-            device,
-            cfg.valid_env.sim_backend,
-        )
+            args.num_eval_episodes, agent, envs, device, cfg.valid_env.sim_backend)
 
         for k, v in eval_metrics.items():
             writer.add_scalar(f"eval/{k}", v.mean(), step)

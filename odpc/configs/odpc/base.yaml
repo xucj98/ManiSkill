@@ -15,7 +15,7 @@ control_mode: pd_ee_pose
 num_envs: 10
 
 trainer:
-  total_iters: 400000
+  total_iters: 400010
   batch_size: 256
   save_freq: 40000
   eval_freq: 40000

@@ -1,9 +1,10 @@
 import os
 import time
-import argparse
-from omegaconf import OmegaConf
 import random
-import gymnasium as gym
+import argparse
+from tqdm import tqdm
+from omegaconf import OmegaConf
+
 import numpy as np
 
 import torch
@@ -13,6 +14,8 @@ from torch.utils.data.sampler import RandomSampler, BatchSampler
 
 from diffusers.training_utils import EMAModel
 
+import gymnasium as gym
+from mani_skill.utils import common
 from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
 from diffusion_policy.make_env import make_eval_envs
 from diffusion_policy.utils import IterationBasedBatchSampler, worker_init_fn
@@ -22,11 +25,13 @@ import odpc.envs
 from odpc.utils.utils import instantiate_from_config
 from odpc.data.data_conversion import DataConversion
 from odpc.models.odpc import ODPCModel
+from odpc.utils.evaluate import evaluate_on_env, evaluate_on_dataset
 
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/odpc/base.yaml")
+    parser.add_argument("--num_eval_episodes", type=int, default=10)
     args, unknown = parser.parse_known_args()
 
     cfg = OmegaConf.load(args.config)
@@ -35,6 +40,46 @@ def get_args():
  
     return args, cfg
 
+
+def copy_ema_buffers():
+    for ema_buffer, source_buffer in zip(ema_model.buffers(), model.buffers()):
+        ema_buffer.data.copy_(source_buffer.data)
+
+
+def save_ckpt():
+    if step % cfg.trainer.save_freq == 0:
+        os.makedirs(f"runs/{run_name}/checkpoints", exist_ok=True)
+        ema.copy_to(ema_model.parameters())
+        copy_ema_buffers()
+        torch.save(
+            {
+                "model": model.state_dict(),
+                "ema_model": ema_model.state_dict(),
+            },
+            f"runs/{run_name}/checkpoints/{step}.pt",
+        )
+
+
+def evaluate_and_save_best():
+    if step % cfg.trainer.eval_freq == 0:
+        ema.copy_to(ema_model.parameters())
+        copy_ema_buffers()
+
+        eval_metrics = evaluate_on_env(
+            args.num_eval_episodes, agent, envs, device, cfg.valid_env.sim_backend
+        )
+        for k, v in eval_metrics.items():
+            writer.add_scalar(f"eval/{k}", v.mean(), step)
+            print(f"eval/{k}: {v.mean():.4f}")
+
+
+def log_metrics():
+    if step % cfg.trainer.log_freq == 0:
+        writer.add_scalar(
+            "charts/learning_rate", optimizer.param_groups[0]["lr"], step
+        )
+        writer.add_scalar("losses/total_loss", total_loss.item(), step)
+            
 
 if __name__ == "__main__":
     args, cfg = get_args()
@@ -106,7 +151,7 @@ if __name__ == "__main__":
     )
 
     model: ODPCModel = instantiate_from_config(cfg.model).to(device)
-
+    
     optimizer = instantiate_from_config(cfg.optimizer, params=model.parameters())
     lr_scheduler = instantiate_from_config(cfg.lr_scheduler, optimizer=optimizer)
     
@@ -115,3 +160,36 @@ if __name__ == "__main__":
 
     agent = instantiate_from_config(
         cfg.agent, model=model, dc=data_conversion, origin_obs_space=origin_obs_space)
+
+    model.train()
+    pbar = tqdm(total=cfg.trainer.total_iters)
+
+    for step, data_batch in enumerate(train_dataloader):
+        data_batch = common.to_tensor(data_batch, device)
+
+        pred = data_conversion.raw_to_pred(
+            poses_obj=data_batch['poses_peg'],
+            poses_camera_world=data_batch['poses_cam0_world'],
+        )
+
+        total_loss = model.compute_loss(
+            obs_seq=data_batch["observations"],
+            action_seq=pred,
+        )
+
+        optimizer.zero_grad()
+        total_loss.backward()
+        optimizer.step()
+        lr_scheduler.step()
+
+        ema.step(model.parameters())
+        
+        evaluate_and_save_best()
+        log_metrics()
+        save_ckpt()
+
+        pbar.update(1)
+        pbar.set_postfix({"loss": total_loss.item()})
+
+    envs.close()
+    writer.close()

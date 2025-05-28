@@ -29,7 +29,7 @@ class ODPCModel(nn.Module):
         obs_cond = self.visual_encoder(obs_seq)  # (B, obs_horizon * obs_dim)
 
         # sample noise to add to actions
-        noise = torch.randn((B, self.pred_horizon, self.act_dim), device=device)
+        noise = torch.randn((B, self.pred_horizon, self.output_dim), device=device)
 
         # sample a diffusion iteration for each data point
         timesteps = torch.randint(
