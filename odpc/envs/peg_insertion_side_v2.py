@@ -45,11 +45,13 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
     def __init__(
             self,
             *args,
+            clearance=0.005,
             robot_uids="panda",
             camera_mode="fixed",  # fixed, random, move
             **kwargs,
     ):
         self.camera_mode = camera_mode
+        self._clearance = clearance
         super().__init__(*args, robot_uids=robot_uids, **kwargs)
 
     def _load_scene(self, options: dict):
