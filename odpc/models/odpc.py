@@ -47,7 +47,7 @@ class ODPCModel(nn.Module):
 
         return F.mse_loss(noise_pred, noise)
 
-    def get_action(self, obs_seq, clip=True):
+    def get_action(self, obs_seq):
         # init scheduler
         # self.noise_scheduler.set_timesteps(self.num_diffusion_iters)
         # set_timesteps will change noise_scheduler.timesteps is only used in noise_scheduler.step()
@@ -57,16 +57,11 @@ class ODPCModel(nn.Module):
         # obs_seq['state']: (B, obs_horizon, obs_state_dim)
         B = obs_seq["rgb"].shape[0]
         with torch.no_grad():
-            if self.include_rgb:
-                obs_seq["rgb"] = obs_seq["rgb"].permute(0, 1, 4, 2, 3)
-            if self.include_depth:
-                obs_seq["depth"] = obs_seq["depth"].permute(0, 1, 4, 2, 3)
-
             obs_cond = self.visual_encoder(obs_seq)  # (B, obs_horizon * obs_dim)
 
             # initialize action from Guassian noise
             noisy_action_seq = torch.randn(
-                (B, self.pred_horizon, self.act_dim), device=obs_seq["rgb"].device
+                (B, self.pred_horizon, self.output_dim), device=obs_seq["rgb"].device
             )
 
             for k in self.noise_scheduler.timesteps:
@@ -84,9 +79,4 @@ class ODPCModel(nn.Module):
                     sample=noisy_action_seq,
                 ).prev_sample
 
-        # only take act_horizon number of actions
-        start = self.obs_horizon - 1
-        end = start + self.act_horizon
-        if clip:
-            noisy_action_seq = noisy_action_seq[:, start:end]
-        return noisy_action_seq  # (B, act_horizon, act_dim)
+        return noisy_action_seq  # (B, act_horizon, output_dim)

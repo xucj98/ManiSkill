@@ -38,11 +38,19 @@ class DataConversion:
 
     @property
     def pred_dim(self) -> int:
-        if self.delta_pred == "abs":
+        if self.rot_rep == "matrix_3x3":
+            return 12
+        elif self.rot_rep == "rotation_6d":
+            return 9
+        elif self.rot_rep == "quaternion":
             return 7
-        else:
+        elif self.rot_rep == "euler":
             return 6
-
+        elif self.rot_rep == "axis_angle":
+            return 6
+        else:
+            raise NotImplementedError
+            
     @property
     def control_dim(self) -> int:
         return 6

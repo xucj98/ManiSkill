@@ -12,6 +12,8 @@ wandb_entity: none
 obs_mode: state_dict+rgb+depth+segmentation
 control_mode: pd_ee_pose
 
+num_envs: 10
+
 trainer:
   total_iters: 400000
   batch_size: 256
@@ -36,7 +38,7 @@ valid_dataset:
 
 valid_env:
   env_id: PegInsertionSide-v2
-  num_eval_envs: 10
+  num_eval_envs: ${num_envs}
   sim_backend: cuda
   env_kwargs:
     obs_mode: ${obs_mode}
@@ -69,10 +71,19 @@ model:
     n_groups: 8
   noise_scheduler_config:
     _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
-    num_train_timesteps: 1000
+    num_train_timesteps: 100
     beta_schedule: "squaredcos_cap_v2"
     clip_sample: true
     prediction_type: "epsilon"
+
+agent:
+  _target_: odpc.models.agent.ODPCAgent
+  num_envs: 10
+  act_horizon: ${act_horizon}
+  pred_horizon: ${pred_horizon}
+  control_mode: ${control_mode}
+  robot_uid: panda
+  video_dir: null
 
 optimizer:
   _target_: torch.optim.AdamW

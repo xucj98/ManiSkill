@@ -63,7 +63,7 @@ if __name__ == "__main__":
     )
 
     tmp_env = gym.make(cfg.valid_env.env_id, **env_kwargs)
-    obs_space = tmp_env.observation_space
+    origin_obs_space = tmp_env.observation_space
     tmp_env.close()
 
     if cfg.track:
@@ -105,10 +105,13 @@ if __name__ == "__main__":
         control_mode=cfg.control_mode,
     )
 
-    odpc_model: ODPCModel = instantiate_from_config(cfg.model).to(device)
+    model: ODPCModel = instantiate_from_config(cfg.model).to(device)
 
-    optimizer = instantiate_from_config(cfg.optimizer, params=odpc_model.parameters())
+    optimizer = instantiate_from_config(cfg.optimizer, params=model.parameters())
     lr_scheduler = instantiate_from_config(cfg.lr_scheduler, optimizer=optimizer)
     
-    ema = EMAModel(parameters=odpc_model.parameters(), power=0.75)
-    ema_odpc_model: ODPCModel = instantiate_from_config(cfg.model).to(device)
+    ema = EMAModel(parameters=model.parameters(), power=0.75)  
+    ema_model: ODPCModel = instantiate_from_config(cfg.model).to(device)
+
+    agent = instantiate_from_config(
+        cfg.agent, model=model, dc=data_conversion, origin_obs_space=origin_obs_space)
