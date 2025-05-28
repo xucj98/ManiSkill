@@ -20,7 +20,7 @@ from diffusion_policy.utils import IterationBasedBatchSampler, worker_init_fn
 from odpc.configs.paths import *
 import odpc.envs
 from odpc.utils.utils import instantiate_from_config
-from odpc.data.data_converison import DataConversion
+from odpc.data.data_conversion import DataConversion
 from odpc.models.odpc import ODPCModel
 
 
