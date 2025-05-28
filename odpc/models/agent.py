@@ -12,13 +12,18 @@ import sapien.core as sapien
 from mani_skill import Pose
 from mani_skill.examples.motionplanning.panda.utils import compute_grasp_info_by_obb
 from mani_skill.utils.geometry.rotation_conversions import (
-    quaternion_multiply, quaternion_invert, matrix_to_euler_angles, quaternion_to_matrix
+    quaternion_multiply, quaternion_invert, matrix_to_euler_angles, quaternion_to_matrix,
+    matrix_to_quaternion, euler_angles_to_matrix
 )
 
 from odpc.data.data_conversion import DataConversion
 from odpc.models.odpc import ODPCModel
 from odpc.utils.math import pose_multiply, pose_inv
+from odpc.utils.visualize import visualize_pose
 
+DT = 0.05
+DP_MAX = DT * 0.5
+DQ_MAX = DT * 1.0
 
 
 class ODPCAgent(nn.Module):
@@ -50,8 +55,8 @@ class ODPCAgent(nn.Module):
         self.action_step = 0
         self.model_action = torch.zeros((num_envs, pred_horizon, dc.control_dim))
 
-        self.grasp_pose = torch.zeros((num_envs, 7))
-        self.reach_pose = torch.zeros((num_envs, 7))
+        self.base_grasp_pose = torch.zeros((num_envs, 7))
+        self.base_reach_pose = torch.zeros((num_envs, 7))
 
         if "panda" in robot_uid:
             self.gripper_state = torch.tensor([1., -1.])  # open, close
@@ -86,9 +91,10 @@ class ODPCAgent(nn.Module):
 
     def get_grasp_pose(
             self,
-            peg_half_size,
-            peg_pose,
-            ee_pose
+            peg_half_size: torch.Tensor,
+            peg_pose: torch.Tensor,
+            ee_pose: torch.Tensor,
+            base_pose: torch.Tensor,
     ):
         for i in range(self.num_envs):
             extents = peg_half_size[i].cpu().numpy() * 2
@@ -102,11 +108,90 @@ class ODPCAgent(nn.Module):
                 obb, approaching=approaching, target_closing=target_closing, depth=0.025)
             closing, center = grasp_info["closing"], grasp_info["center"]
             grasp_pose = self.build_grasp_pose(approaching, closing, center)
-            self.grasp_pose[i, :3] = torch.from_numpy(grasp_pose.p)
-            self.grasp_pose[i, 3:] = torch.from_numpy(grasp_pose.q)
+            self.base_grasp_pose[i, :3] = torch.from_numpy(grasp_pose.p)
+            self.base_grasp_pose[i, 3:] = torch.from_numpy(grasp_pose.q)
             reach_pose = grasp_pose * sapien.Pose([0, 0, -0.05])
-            self.reach_pose[i, :3] = torch.from_numpy(reach_pose.p)
-            self.reach_pose[i, 3:] = torch.from_numpy(reach_pose.q)
+            self.base_reach_pose[i, :3] = torch.from_numpy(reach_pose.p)
+            self.base_reach_pose[i, 3:] = torch.from_numpy(reach_pose.q)
+        self.base_grasp_pose = pose_multiply(pose_inv(base_pose), self.base_grasp_pose.to(base_pose))
+        self.base_reach_pose = pose_multiply(pose_inv(base_pose), self.base_reach_pose.to(base_pose))
+
+
+    def target_pose_to_action(
+            self, 
+            target_pose: torch.Tensor, 
+            base_pose: torch.Tensor, 
+            ee_pose: torch.Tensor, 
+            target_in_base: bool = False,
+    ):
+        if target_in_base:
+            base_target = target_pose
+        else:
+            base_target = pose_multiply(pose_inv(base_pose), target_pose)
+        base_ee = pose_multiply(pose_inv(base_pose), ee_pose)
+
+        dp = base_target[..., :3] - base_ee[..., :3]
+        dq = quaternion_multiply(base_target[..., 3:], quaternion_invert(base_ee[..., 3:]))
+        de = matrix_to_euler_angles(quaternion_to_matrix(dq), "XYZ")
+
+        dp = dp * torch.clamp(DP_MAX / (torch.norm(dp, dim=-1, keepdim=True) + 1e-6), max=1.0)
+        de = de * torch.clamp(DQ_MAX / (torch.norm(de, dim=-1, keepdim=True) + 1e-6), max=1.0)
+
+        if self.control_mode == "pd_ee_delta_pose":
+            action = torch.cat([dp, -de], dim=-1)
+        elif self.control_mode == "pd_ee_pose":
+            p = base_ee[..., :3] + dp
+            dq = matrix_to_quaternion(euler_angles_to_matrix(de, "XYZ"))
+            q = quaternion_multiply(dq, base_ee[..., 3:])
+            euler = matrix_to_euler_angles(quaternion_to_matrix(q), "XYZ")
+            action = torch.cat([p, euler], dim=-1)
+        else:
+            raise NotImplementedError
+
+        return action
+
+
+    def grasp(self, state_dict):
+        ee_pose = state_dict["extra"]["tcp_pose"][:, 0, :]
+        base_pose = state_dict["extra"]["base_pose"][:, 0, :]
+        base_ee_pose = pose_multiply(pose_inv(base_pose), ee_pose)
+
+        if self.stages[0] == 0:
+            self.get_grasp_pose(
+                peg_half_size=state_dict['extra']['peg_half_size'][:, -1, :],
+                peg_pose=state_dict['extra']['peg_pose'][:, -1, :],
+                ee_pose=ee_pose,
+                base_pose=base_pose,
+            )
+            self.stages[:] = 1
+        
+        # get mp_action (motion-planning action)
+        def reach_target(threshold):
+            dp = torch.sum(torch.abs(base_ee_pose[i, :3] - mp_target_pose[i, :3])).item()
+            dq1 = torch.sum(torch.abs(base_ee_pose[i, 3:] - mp_target_pose[i, 3:])).item()
+            dq2 = torch.sum(torch.abs(base_ee_pose[i, 3:] + mp_target_pose[i, 3:])).item()
+            return dp + min(dq1, dq2) < threshold
+
+        mp_target_pose = torch.zeros_like(ee_pose)
+
+        for i in range(self.num_envs):
+            if self.stages[i] == 1:
+                mp_target_pose[i] = self.base_reach_pose[i]
+                if reach_target(0.05):
+                    self.stages[i] = 2
+            if self.stages[i] == 2:
+                mp_target_pose[i] = self.base_grasp_pose[i]
+                if reach_target(0.02):
+                    self.stages[i] = 3
+            if 3 <= self.stages[i] < 4:
+                mp_target_pose[i] = self.base_grasp_pose[i]
+                self.stages[i] += 1 / 20
+            if 4 <= self.stages[i] < 5:
+                mp_target_pose[i] = self.base_reach_pose[i]
+                if reach_target(0.05):
+                    self.stages[i] = 5
+        
+        return mp_target_pose
 
     @staticmethod
     def make_grid(images: np.ndarray) -> np.ndarray:
@@ -120,18 +205,14 @@ class ODPCAgent(nn.Module):
             grid[x: x + h, y: y + w] = rgb
         return grid
 
-    def get_action(self, obs_seq, channel_last=False):
-        _, state_dict = self.state_to_dict(obs_seq["state"], self.origin_obs_space)
-        if channel_last:
-            obs_seq["rgb"] = obs_seq["rgb"].permute(0, 1, 4, 2, 3)
-            obs_seq["depth"] = obs_seq["depth"].permute(0, 1, 4, 2, 3)       
-        
+    def odpc_exec(self, obs_seq, state_dict):
         ee_pose = state_dict["extra"]["tcp_pose"][:, 0, :]
         base_pose = state_dict["extra"]["base_pose"][:, 0, :]
 
+        # Receding Horizon Control
         if self.action_step % self.act_horizon == 0:
             pred = self.model.get_action(obs_seq)
-            self.model_action = self.dc.pred_to_control(
+            self.odpc_target_pose = self.dc.pred_to_target_pose(
                 pred=pred.clone().detach(),
                 poses_ee_cur=state_dict["extra"]["tcp_pose"][..., :1, :],
                 poses_base=state_dict["extra"]["base_pose"][..., :1, :],
@@ -145,63 +226,63 @@ class ODPCAgent(nn.Module):
                     poses_cam_obj_cur=state_dict["extra"]["cam0_peg_pose"][..., :1, :],
                 )
                 grid = self.make_grid(images)
-                cv2.imwrite(f"{self.video_dir}/{self.action_step:04d}.jpg", grid[:, :, ::-1])
+                cv2.imwrite(f"{self.video_dir}/{self.action_step:04d}-pred.jpg", grid[:, :, ::-1])
 
-        if self.stages[0] == 0:
-            self.get_grasp_pose(
-                peg_half_size=state_dict['extra']['peg_half_size'][:, -1, :],
-                peg_pose=state_dict['extra']['peg_pose'][:, -1, :],
-                ee_pose=ee_pose,
-            )
-            self.stages[:] = 1
+        return self.odpc_target_pose[..., self.action_step % self.act_horizon, :]
 
-        # get mp_action (motion-planning action)
-        def reach_target(threshold):
-            dp = torch.sum(torch.abs(ee_pose[i, :3] - mp_target_pose[i, :3])).item()
-            dq1 = torch.sum(torch.abs(ee_pose[i, 3:] - mp_target_pose[i, 3:])).item()
-            dq2 = torch.sum(torch.abs(ee_pose[i, 3:] + mp_target_pose[i, 3:])).item()
-            return dp + min(dq1, dq2) < threshold
 
-        mp_target_pose = torch.zeros_like(ee_pose)
+    def get_action(self, obs_seq, channel_last=False):
+        _, state_dict = self.state_to_dict(obs_seq["state"], self.origin_obs_space)
+        if channel_last:
+            obs_seq["rgb"] = obs_seq["rgb"].permute(0, 1, 4, 2, 3)
+            obs_seq["depth"] = obs_seq["depth"].permute(0, 1, 4, 2, 3)       
+        
+        mp_target_pose = self.grasp(state_dict)
+        odpc_target_pose = self.odpc_exec(obs_seq, state_dict)
+        cond = self.stages.to(odpc_target_pose.device) == 5
+        target_pose = torch.where(cond[:, None], odpc_target_pose, mp_target_pose)
 
-        for i in range(self.num_envs):
-            if self.stages[i] == 1:
-                mp_target_pose[i] = self.reach_pose[i]
-                if reach_target(0.05):
-                    self.stages[i] = 2
-            if self.stages[i] == 2:
-                mp_target_pose[i] = self.grasp_pose[i]
-                if reach_target(0.02):
-                    self.stages[i] = 3
-            if 3 <= self.stages[i] < 4:
-                mp_target_pose[i] = self.grasp_pose[i]
-                self.stages[i] += 1 / 20
-            if 4 <= self.stages[i] < 5:
-                mp_target_pose[i] = self.reach_pose[i]
-                if reach_target(0.05):
-                    self.stages[i] = 5
-        base_target = pose_multiply(pose_inv(base_pose), mp_target_pose)
-        if self.control_mode == "pd_ee_delta_pose":
-            base_ee = pose_multiply(pose_inv(base_pose), ee_pose)
-            p = base_target[..., :3] - base_ee[..., :3]
-            q = quaternion_multiply(base_target[..., 3:], quaternion_invert(base_ee[..., 3:]))
-            euler = matrix_to_euler_angles(quaternion_to_matrix(q), "XYZ")
-            mp_action = torch.cat([p, -euler], dim=-1)
-        elif self.control_mode == "pd_ee_pose":
-            p = base_target[..., :3]
-            q = base_target[..., 3:]
-            euler = matrix_to_euler_angles(quaternion_to_matrix(q), "XYZ")
-            mp_action = torch.cat([p, euler], dim=-1)
-        else:
-            raise NotImplementedError
+        if self.video_dir is not None:
+            base_pose = state_dict["extra"]["base_pose"][..., 0, :]
+            ee_pose = state_dict["extra"]["tcp_pose"][..., 0, :]
+            camera_world_pose = state_dict["extra"]["cam0_world_pose"][..., 0, :]
+            camera_target_pose = pose_multiply(camera_world_pose, base_pose, target_pose)
+            camera_target_pose = camera_target_pose.cpu().numpy()
+            camera_ee_pose = pose_multiply(camera_world_pose, ee_pose)
+            camera_ee_pose = camera_ee_pose.cpu().numpy()
+            
+            rgb = obs_seq["rgb"][:, 0, :3, :, :].cpu().numpy()
+            rgb = rgb.transpose(0, 2, 3, 1)
+            
+            h, w = rgb.shape[-3:-1]
+            h, w = h / 2, w / 2
+            intrinsic = np.array([
+                [w, 0, w],
+                [0, h, h],
+                [0, 0, 1],
+            ])
 
-        # use agent action
-        for i in range(self.num_envs):
-            if self.stages[i] == 5:
-                mp_action[i] = self.model_action[i][self.action_step % self.act_horizon]
+            images = []
+            for i in range(self.num_envs):
+                image = rgb[i]
+                image = image * 0.3 + visualize_pose(image, camera_ee_pose[i], intrinsic) * 0.7
+                image = visualize_pose(image, camera_target_pose[i], intrinsic)
+                images.append(image.astype(np.uint8))
+            images = np.stack(images, axis=0)
+            
+            grid = self.make_grid(images)
+            cv2.imwrite(f"{self.video_dir}/{self.action_step:04d}.jpg", grid[:, :, ::-1])
 
-        gripper = self.gripper_state[(self.stages >= 3).int()].to(mp_action)
-        action = torch.cat([mp_action, gripper[:, None]], dim=-1)
+        action = self.target_pose_to_action(
+            target_pose=target_pose,
+            base_pose=state_dict["extra"]["base_pose"][..., 0, :],
+            ee_pose=state_dict["extra"]["tcp_pose"][..., 0, :],
+            target_in_base=True,
+        )
+        
+        # add gripper action
+        gripper = self.gripper_state[(self.stages >= 3).int()].to(action)
+        action = torch.cat([action, gripper[:, None]], dim=-1)
 
         self.action_step += 1
 

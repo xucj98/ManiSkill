@@ -62,6 +62,7 @@ model:
     _target_: odpc.models.visual_encoder.Resnet18Encoder
     in_channels: 4
     out_dim: 256
+    depth_clamp: 3000
   noise_pred_net_config:
     _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
     input_dim: ${model.output_dim}

@@ -19,8 +19,6 @@ RotationRepresentation = Literal["matrix_3x3", "rotation_6d", "quaternion", "eul
 DeltaPrediction = Literal["abs", "rel_to_first", "rel_to_prev"]
 
 
-
-
 class DataConversion:
     def __init__(
             self,
@@ -114,7 +112,7 @@ class DataConversion:
         return a
 
     @torch.no_grad()
-    def pred_to_control(
+    def pred_to_target_pose(
             self,
             pred: torch.Tensor,
             poses_ee_cur: torch.Tensor,
@@ -177,6 +175,34 @@ class DataConversion:
         poses_base_ee_cur = pose_multiply(pose_inv(poses_base[..., :1, :]), poses_ee_cur)
         poses_base_ee = pose_multiply(poses_base_cam, pred, poses_cam_base, poses_base_ee_cur)
 
+        return poses_base_ee
+
+    @torch.no_grad()
+    def pred_to_control(
+            self,
+            pred: torch.Tensor,
+            poses_ee_cur: torch.Tensor,
+            poses_base: torch.Tensor,
+            poses_camera: Optional[torch.Tensor] = None,
+            poses_camera_world: Optional[torch.Tensor] = None,
+            poses_frame_obj_cur: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            pred: nn prediction, tensor of shape (..., T, D)
+            poses_ee_cur: ee in world, tensor of shape (..., 1, 7)
+            poses_base: robot base in world, tensor of shape (..., T+1, 7)
+            poses_camera: camera in world, tensor of shape (..., T+1, 7)
+            poses_camera_world: world in camera, tensor of shape (..., T+1, 7)
+            poses_frame_obj_cur: current object poses, assume in the self.frame, tensor of shape (..., 1, 7)
+
+        Returns:
+            tensor of shape (..., T, 6) for "pd_ee_delta_pose", (..., T, 7) for "pd_ee_pose"
+        """
+
+        poses_base_ee_cur = pose_multiply(pose_inv(poses_base[..., :1, :]), poses_ee_cur)
+        poses_base_ee = self.pred_to_target_pose(pred, poses_ee_cur, poses_base, poses_camera, poses_camera_world, poses_frame_obj_cur)
+
         if self.control_mode == "pd_ee_pose":
             p = poses_base_ee[..., :3]
             q = poses_base_ee[..., 3:]
@@ -192,7 +218,7 @@ class DataConversion:
             return torch.cat((delta_p, -euler), dim=-1)
         else:
             raise NotImplementedError
-
+    
 
     @torch.no_grad()
     def pred_to_visualize(
@@ -210,7 +236,7 @@ class DataConversion:
             poses_cam_obj_cur: current object poses in camera, tensor of shape (..., 1, 7)
 
         Returns:
-            tensor of shape (..., T, 6) for "pd_ee_delta_pose", (..., T, 7) for "pd_ee_pose"
+            np.ndarray of shape (B, H, W, 3)
         """
         assert self.frame in ["camera_first", "camera_cur"]
         assert pred.ndim == 3
