@@ -27,14 +27,14 @@ train_dataset:
   data_path: peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
   obs_horizon: ${obs_horizon}
   pred_horizon: ${pred_horizon}
-  num_traj: 100
+  num_traj: 1000
 
 valid_dataset:
   _target_: odpc.data.odpc_dataset.ODPCDataset
   data_path: peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
   obs_horizon: ${obs_horizon}
   pred_horizon: ${pred_horizon}
-  num_traj: 10
+  num_traj: 100
 
 valid_env:
   env_id: PegInsertionSide-v2

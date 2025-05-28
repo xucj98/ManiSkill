@@ -14,7 +14,7 @@ from odpc.utils.visualize import visualize_pose
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--traj_name', type=str, default='peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5')
+    parser.add_argument('--traj-name', type=str, default='peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5')
     return parser.parse_args()
 
 
@@ -25,7 +25,6 @@ if __name__ == "__main__":
     with h5py.File(os.path.join(DATASET_ROOT, 'PegInsertionSide-v2', 'motionplanning', args.traj_name), 'r') as file:
         
         for traj_key in file.keys():
-            print(file[f'{traj_key}/obs/extra'].keys())
             cam0_peg_poses = file[f'{traj_key}/obs/extra/cam0_peg_pose'][:]
             images_raw = file[f'{traj_key}/obs/sensor_data/base_camera/rgb'][:]
             intrinsic = file[f'{traj_key}/obs/sensor_param/base_camera/intrinsic_cv'][0]
