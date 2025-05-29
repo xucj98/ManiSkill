@@ -7,6 +7,8 @@ build/
 dist/
 *.egg-info/
 runs/
+demos/
+wandb/
 
 # ipython/jupyter notebooks
 # *.ipynb
