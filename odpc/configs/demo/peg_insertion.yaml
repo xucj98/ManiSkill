@@ -6,7 +6,6 @@ only_count_success: True
 traj_name: "peg_insertion_demo"
 num_procs: 10
 shader: "default"
-record_dir: null
 
 motion_planning_args:
   env_id: ${env_id}
@@ -28,5 +27,4 @@ motion_planning_args:
   vis: False
   save_video: False
   traj_name: ${traj_name}
-  record_dir: ${record_dir}
   num_procs: ${num_procs}

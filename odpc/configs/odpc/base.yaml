@@ -24,14 +24,14 @@ trainer:
 
 train_dataset:
   _target_: odpc.data.odpc_dataset.ODPCDataset
-  data_path: peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
+  data_path: demos/peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
   obs_horizon: ${obs_horizon}
   pred_horizon: ${pred_horizon}
   num_traj: 1000
 
 valid_dataset:
   _target_: odpc.data.odpc_dataset.ODPCDataset
-  data_path: peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
+  data_path: demos/peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
   obs_horizon: ${obs_horizon}
   pred_horizon: ${pred_horizon}
   num_traj: 100
@@ -40,6 +40,7 @@ valid_env:
   env_id: PegInsertionSide-v2
   num_eval_envs: ${num_envs}
   sim_backend: cuda
+  video_dir: runs/${exp_name}/videos/
   env_kwargs:
     obs_mode: ${obs_mode}
     control_mode: ${control_mode}

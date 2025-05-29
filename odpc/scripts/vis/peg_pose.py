@@ -8,13 +8,12 @@ from diffusion_policy.math_utils import (
     pose_to_matrix, extrinsic_to_t_cam_world,
 )
 
-from odpc.configs.paths import *
 from odpc.utils.visualize import visualize_pose
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--traj-name', type=str, default='peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5')
+    parser.add_argument('--traj-path', type=str, default='demos/peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5')
     return parser.parse_args()
 
 
@@ -22,7 +21,7 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
 
-    with h5py.File(os.path.join(DATASET_ROOT, 'PegInsertionSide-v2', 'motionplanning', args.traj_name), 'r') as file:
+    with h5py.File(args.traj_path, 'r') as file:
         
         for traj_key in file.keys():
             cam0_peg_poses = file[f'{traj_key}/obs/extra/cam0_peg_pose'][:]

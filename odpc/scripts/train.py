@@ -20,7 +20,6 @@ from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
 from diffusion_policy.make_env import make_eval_envs
 from diffusion_policy.utils import IterationBasedBatchSampler, worker_init_fn
 
-from odpc.configs.paths import *
 import odpc.envs
 from odpc.utils.utils import instantiate_from_config
 from odpc.data.data_conversion import DataConversion
@@ -48,7 +47,7 @@ def copy_ema_buffers():
 
 def save_ckpt():
     if step % cfg.trainer.save_freq == 0:
-        os.makedirs(f"runs/{run_name}/checkpoints", exist_ok=True)
+        os.makedirs(f"runs/{args.exp_name}/checkpoints", exist_ok=True)
         ema.copy_to(ema_model.parameters())
         copy_ema_buffers()
         torch.save(
@@ -56,7 +55,7 @@ def save_ckpt():
                 "model": model.state_dict(),
                 "ema_model": ema_model.state_dict(),
             },
-            f"runs/{run_name}/checkpoints/{step}.pt",
+            f"runs/{args.exp_name}/checkpoints/{step}.pt",
         )
 
 
@@ -84,8 +83,6 @@ def log_metrics():
 if __name__ == "__main__":
     args, cfg = get_args()
     
-    run_name = f"{cfg.valid_env.env_id}__{cfg.exp_name}__{cfg.seed}__{int(time.time())}"
-
     assert cfg.obs_horizon + cfg.act_horizon - 1 <= cfg.pred_horizon
     assert cfg.obs_horizon >= 1 and cfg.act_horizon >= 1 and cfg.pred_horizon >= 1
 
@@ -116,19 +113,17 @@ if __name__ == "__main__":
         wandb.init(
             project=cfg.wandb_project_name,
             entity=cfg.wandb_entity,
+            sync_tensorboard=True,
             config=OmegaConf.to_object(cfg),
-            name=run_name,
+            name=args.exp_name,
             save_code=True,
             group="ODPC",
             tags=["odpc"],
             job_type="train",
         )
 
-    writer = SummaryWriter(f"runs/{run_name}")
+    writer = SummaryWriter(f"runs/{args.exp_name}")
     
-    cfg.train_dataset.data_path = os.path.join(
-        DATASET_ROOT, cfg.valid_env.env_id, 'motionplanning', 
-        cfg.train_dataset.data_path)
     dataset = instantiate_from_config(cfg.train_dataset)
     sampler = RandomSampler(dataset, replacement=False)
     batch_sampler = BatchSampler(sampler, batch_size=cfg.trainer.batch_size, drop_last=True)
@@ -141,9 +136,6 @@ if __name__ == "__main__":
         persistent_workers=(cfg.trainer.num_dataload_workers > 0),
     )
 
-    cfg.valid_dataset.data_path = os.path.join(
-        DATASET_ROOT, cfg.valid_env.env_id, 'motionplanning', 
-        cfg.valid_dataset.data_path)
     valid_dataset = instantiate_from_config(cfg.valid_dataset)
 
     data_conversion = DataConversion(

@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from mani_skill.trajectory.replay_trajectory import main as replay_trajectory
 from mani_skill.trajectory.replay_trajectory import Args as ReplayTrajectoryArgs
 
-from odpc.configs.paths import *
 import odpc.envs
 import odpc.data.demo.panda_solutions as panda_solutions
 from odpc.data.demo.motionplanning import main as motion_planning, MP_SOLUTIONS
@@ -19,6 +18,7 @@ MP_SOLUTIONS["PegInsertionSide-v2"] = panda_solutions.solvePegInsertionSide
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/demo/peg_insertion.yaml")
+    parser.add_argument("--record_dir", type=str, default="demos")
     args, unknown = parser.parse_known_args()
 
     cfg = OmegaConf.load(args.config)
@@ -33,11 +33,10 @@ if __name__ == "__main__":
     mp.set_start_method("spawn")
     
     # todo: 支持 xarm6, 
-    if cfg.record_dir is None:
-        cfg.record_dir = DATASET_ROOT
+    cfg.motion_planning_args.record_dir = args.record_dir
     motion_planning(cfg.motion_planning_args)
     
-    src_dir = os.path.join(DATASET_ROOT, cfg.env_id, "motionplanning")
+    src_dir = os.path.join(args.record_dir, cfg.env_id, "motionplanning")
     
     replay_trajectory_args = ReplayTrajectoryArgs(
         traj_path=os.path.join(src_dir, f"{cfg.traj_name}.h5"),
