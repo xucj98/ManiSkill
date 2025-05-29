@@ -47,7 +47,7 @@ def copy_ema_buffers():
 
 def save_ckpt():
     if step % cfg.trainer.save_freq == 0:
-        os.makedirs(f"runs/{args.exp_name}/checkpoints", exist_ok=True)
+        os.makedirs(f"runs/{cfg.exp_name}/checkpoints", exist_ok=True)
         ema.copy_to(ema_model.parameters())
         copy_ema_buffers()
         torch.save(
@@ -55,7 +55,7 @@ def save_ckpt():
                 "model": model.state_dict(),
                 "ema_model": ema_model.state_dict(),
             },
-            f"runs/{args.exp_name}/checkpoints/{step}.pt",
+            f"runs/{cfg.exp_name}/checkpoints/{step}.pt",
         )
 
 
@@ -115,14 +115,14 @@ if __name__ == "__main__":
             entity=cfg.wandb_entity,
             sync_tensorboard=True,
             config=OmegaConf.to_object(cfg),
-            name=args.exp_name,
+            name=cfg.exp_name,
             save_code=True,
             group="ODPC",
             tags=["odpc"],
             job_type="train",
         )
 
-    writer = SummaryWriter(f"runs/{args.exp_name}")
+    writer = SummaryWriter(f"runs/{cfg.exp_name}")
     
     dataset = instantiate_from_config(cfg.train_dataset)
     sampler = RandomSampler(dataset, replacement=False)
