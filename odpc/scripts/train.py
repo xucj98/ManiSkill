@@ -24,18 +24,21 @@ import odpc.envs
 from odpc.utils.utils import instantiate_from_config
 from odpc.data.data_conversion import DataConversion
 from odpc.models.odpc import ODPCModel
-from odpc.utils.evaluate import evaluate_on_env, evaluate_on_dataset
+from odpc.utils.evaluate import Evaluator
 
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/odpc/base.yaml")
-    parser.add_argument("--num_eval_episodes", type=int, default=10)
+    parser.add_argument("--exp-name", type=str, default="odpc-train")
+    parser.add_argument("--num-eval-episodes", type=int, default=100)
     args, unknown = parser.parse_known_args()
 
     cfg = OmegaConf.load(args.config)
     cli = OmegaConf.from_dotlist(unknown)
     cfg = OmegaConf.merge(cfg, cli)
+
+    cfg.exp_name = args.exp_name
  
     return args, cfg
 
@@ -60,16 +63,20 @@ def save_ckpt():
 
 
 def evaluate_and_save_best():
+
     if step % cfg.trainer.eval_freq == 0:
         ema.copy_to(ema_model.parameters())
         copy_ema_buffers()
 
-        eval_metrics = evaluate_on_env(
-            args.num_eval_episodes, agent, envs, device, cfg.valid_env.sim_backend
-        )
-        for k, v in eval_metrics.items():
-            writer.add_scalar(f"eval/{k}", v.mean(), step)
-            print(f"eval/{k}: {v.mean():.4f}")
+        metrics = evaluator.evaluate(args.num_eval_episodes, cfg.trainer.batch_size)
+        for k, v in metrics.items():
+            if isinstance(v, dict):
+                for sub_k, sub_v in v.items():
+                    writer.add_scalar(f"eval/{k}/{sub_k}", sub_v.mean(), step)
+                    print(f"eval/{k}/{sub_k}: {sub_v.mean():.6f}")
+            else:
+                writer.add_scalar(f"eval/{k}", v.mean(), step)
+                print(f"eval/{k}: {v.mean():.6f}")
 
 
 def log_metrics():
@@ -92,22 +99,6 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = cfg.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    env_kwargs = OmegaConf.to_object(cfg.valid_env.env_kwargs)
-    other_kwargs = dict(obs_horizon=cfg.obs_horizon)
-    envs = make_eval_envs(
-        cfg.valid_env.env_id,
-        cfg.valid_env.num_eval_envs,
-        cfg.valid_env.sim_backend,
-        env_kwargs,
-        other_kwargs,
-        video_dir=cfg.valid_env.video_dir,
-        wrappers=[FlattenRGBDObservationWrapper],
-    )
-
-    tmp_env = gym.make(cfg.valid_env.env_id, **env_kwargs)
-    origin_obs_space = tmp_env.observation_space
-    tmp_env.close()
 
     if cfg.track:
         import wandb
@@ -137,11 +128,7 @@ if __name__ == "__main__":
         persistent_workers=(cfg.trainer.num_dataload_workers > 0),
     )
 
-    valid_dataset = instantiate_from_config(cfg.valid_dataset)
-
-    data_conversion = DataConversion(
-        control_mode=cfg.control_mode,
-    )
+    data_conversion = instantiate_from_config(cfg.data_conversion)
 
     model: ODPCModel = instantiate_from_config(cfg.model).to(device)
     
@@ -150,9 +137,10 @@ if __name__ == "__main__":
     
     ema = EMAModel(parameters=model.parameters(), power=0.75)  
     ema_model: ODPCModel = instantiate_from_config(cfg.model).to(device)
+    ema_model.eval()
 
-    agent = instantiate_from_config(
-        cfg.agent, model=model, dc=data_conversion, origin_obs_space=origin_obs_space)
+    # 创建evaluator
+    evaluator: Evaluator = instantiate_from_config(cfg.evaluator, model=model, dc=data_conversion)
 
     model.train()
     pbar = tqdm(total=cfg.trainer.total_iters)
@@ -184,5 +172,5 @@ if __name__ == "__main__":
         pbar.update(1)
         pbar.set_postfix({"loss": total_loss.item()})
 
-    envs.close()
+    evaluator.close()
     writer.close()

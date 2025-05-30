@@ -67,6 +67,7 @@ if __name__ == "__main__":
         wandb.init(
             project=cfg.wandb_project_name,
             entity=cfg.wandb_entity,
+            sync_tensorboard=True,
             config=OmegaConf.to_object(cfg),
             name=cfg.exp_name,
             save_code=True,
