@@ -101,6 +101,7 @@ if __name__ == "__main__":
         cfg.valid_env.sim_backend,
         env_kwargs,
         other_kwargs,
+        video_dir=cfg.valid_env.video_dir,
         wrappers=[FlattenRGBDObservationWrapper],
     )
 

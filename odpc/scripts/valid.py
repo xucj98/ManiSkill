@@ -39,7 +39,9 @@ def get_args():
     parser.add_argument("--ckpt-path", type=str, default=None)
     parser.add_argument("--use-ema", action="store_true")
     parser.add_argument("--num-eval-episodes", type=int, default=100)
-    parser.add_argument("--video-dir", type=str, default=None)
+    parser.add_argument("--outputs-dir", type=str, default='outputs')
+    parser.add_argument("--render", action="store_true", default=False)
+    parser.add_argument("--render-pred", action="store_true", default=False)
     args, unknown = parser.parse_known_args()
 
     cfg = OmegaConf.load(args.config)
@@ -52,8 +54,7 @@ def get_args():
 if __name__ == "__main__":
     args, cfg = get_args()
 
-    run_name = f"{cfg.valid_env.env_id}__{cfg.exp_name}__{cfg.seed}__{int(time.time())}"
-
+    
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
@@ -69,6 +70,7 @@ if __name__ == "__main__":
         cfg.valid_env.sim_backend,
         env_kwargs,
         other_kwargs,
+        video_dir=f"{args.outputs_dir}/video" if args.render else None,
         wrappers=[FlattenRGBDObservationWrapper],
     )
 
@@ -82,14 +84,14 @@ if __name__ == "__main__":
             project=cfg.wandb_project_name,
             entity=cfg.wandb_entity,
             config=OmegaConf.to_object(cfg),
-            name=run_name,
+            name=cfg.exp_name,
             save_code=True,
             group="ODPC",
             tags=["odpc"],
             job_type="eval",
         )
     
-    writer = SummaryWriter(f"runs/{run_name}")
+    writer = SummaryWriter(f"runs/{cfg.exp_name}")
     
     data_conversion = DataConversion(
         control_mode=cfg.control_mode,
@@ -99,7 +101,7 @@ if __name__ == "__main__":
 
     agent: ODPCAgent = instantiate_from_config(
         cfg.agent, model=model, dc=data_conversion, origin_obs_space=origin_obs_space,
-        video_dir=args.video_dir,
+        video_dir=f"{args.outputs_dir}/pred" if args.render_pred else None,
     )
 
     if os.path.isdir(args.ckpt_path):
@@ -119,9 +121,9 @@ if __name__ == "__main__":
     for step, ckpt_path in ckpt_paths.items():
         ckpt = torch.load(ckpt_path)
         if args.use_ema:
-            model.load_state_dict(ckpt["ema_agent"])
+            model.load_state_dict(ckpt["ema_model"])
         else:
-            model.load_state_dict(ckpt["agent"])
+            model.load_state_dict(ckpt["model"])
 
         eval_metrics = evaluate_on_env(
             args.num_eval_episodes, agent, envs, device, cfg.valid_env.sim_backend)
