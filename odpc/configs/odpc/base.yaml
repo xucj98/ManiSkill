@@ -12,7 +12,7 @@ wandb_entity: null
 obs_mode: state_dict+rgb+depth+segmentation
 control_mode: pd_ee_pose
 
-num_envs: 10
+num_envs: 20
 
 trainer:
   total_iters: 400010
@@ -29,30 +29,13 @@ train_dataset:
   pred_horizon: ${pred_horizon}
   num_traj: 1000
 
-valid_dataset:
-  _target_: odpc.data.odpc_dataset.ODPCDataset
-  data_path: demos/peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
-  obs_horizon: ${obs_horizon}
-  pred_horizon: ${pred_horizon}
-  num_traj: 100
-
-valid_env:
-  env_id: PegInsertionSide-v2
-  num_eval_envs: ${num_envs}
-  sim_backend: cuda
-  video_dir: runs/${exp_name}/videos/
-  env_kwargs:
-    obs_mode: ${obs_mode}
-    control_mode: ${control_mode}
-    reward_mode: sparse
-    render_mode: rgb_array
-    human_render_camera_configs:
-      shader_pack: default
-    sensor_configs:
-      shader_pack: default
-    robot_uids: panda
-    camera_mode: fixed
-    max_episode_steps: 300
+data_conversion:
+  _target_: odpc.data.data_conversion.DataConversion
+  frame: camera_first
+  delta_pred: rel_to_prev
+  rot_rep: axis_angle
+  control_mode: ${control_mode}
+  dt: 0.05
 
 model:
   _target_: odpc.models.odpc.ODPCModel
@@ -78,14 +61,52 @@ model:
     clip_sample: true
     prediction_type: "epsilon"
 
-agent:
-  _target_: odpc.models.agent.ODPCAgent
-  num_envs: 10
-  act_horizon: ${act_horizon}
-  pred_horizon: ${pred_horizon}
-  control_mode: ${control_mode}
-  robot_uid: panda
-  video_dir: null
+
+evaluator:
+  _target_: odpc.utils.evaluate.Evaluator
+
+  env_configs:
+    ind:
+      env:
+        _target_: diffusion_policy.make_env.make_eval_envs
+        env_id: PegInsertionSide-v2
+        num_envs: ${num_envs}
+        sim_backend: cuda
+        env_kwargs:
+          obs_mode: ${obs_mode}
+          control_mode: ${control_mode}
+          reward_mode: sparse
+          render_mode: rgb_array
+          human_render_camera_configs:
+            shader_pack: default
+          sensor_configs:
+            shader_pack: default
+          robot_uids: panda
+          camera_mode: fixed
+          max_episode_steps: 300
+        other_kwargs:
+          obs_horizon: ${obs_horizon}
+        video_dir: runs/${exp_name}/videos/ind_render
+      agent:
+        _target_: odpc.models.agent.ODPCAgent
+        num_envs: ${num_envs}
+        act_horizon: ${act_horizon}
+        pred_horizon: ${pred_horizon}
+        control_mode: ${control_mode}
+        robot_uid: panda
+        video_dir: runs/${exp_name}/videos/ind_pred
+    # ood: todo
+
+  dataset_configs:
+    ind:
+      _target_: odpc.data.odpc_dataset.ODPCDataset
+      data_path: demos/peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
+      obs_horizon: ${obs_horizon}
+      pred_horizon: ${pred_horizon}
+      num_traj: 100
+    # ood: todo
+
+
 
 optimizer:
   _target_: torch.optim.AdamW
