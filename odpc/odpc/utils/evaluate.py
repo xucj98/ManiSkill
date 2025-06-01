@@ -113,32 +113,32 @@ class Evaluator:
         self.device = next(model.parameters()).device
         
         # 初始化环境和agent
-        self.envs = {}
-        self.agents = {}
+        # self.envs = {}
+        # self.agents = {}
         
-        if self.env_configs is not None:
-            for env_name, env_config in self.env_configs.items():
-                # 创建环境
-                env_kwargs = OmegaConf.to_object(env_config.env.env_kwargs)
-                other_kwargs = OmegaConf.to_object(env_config.env.other_kwargs)
-                self.envs[env_name] = instantiate_from_config(
-                    env_config.env,
-                    env_kwargs=env_kwargs,
-                    other_kwargs=other_kwargs,
-                    wrappers=[FlattenRGBDObservationWrapper],
-                )
+        # if self.env_configs is not None:
+        #     for env_name, env_config in self.env_configs.items():
+        #         # 创建环境
+        #         env_kwargs = OmegaConf.to_object(env_config.env.env_kwargs)
+        #         other_kwargs = OmegaConf.to_object(env_config.env.other_kwargs)
+        #         self.envs[env_name] = instantiate_from_config(
+        #             env_config.env,
+        #             env_kwargs=env_kwargs,
+        #             other_kwargs=other_kwargs,
+        #             wrappers=[FlattenRGBDObservationWrapper],
+        #         )
                
-                # 创建agent
-                tmp_env = gym.make(env_config.env.env_id, **env_kwargs)
-                origin_obs_space = tmp_env.observation_space
-                tmp_env.close()
-                self.agents[env_name] = instantiate_from_config(
-                    env_config.agent,
-                    model=self.model,
-                    dc=self.dc,
-                    origin_obs_space=origin_obs_space,
-                    video_dir=env_config.agent.video_dir,
-                ).eval().to(self.device)
+        #         # 创建agent
+        #         tmp_env = gym.make(env_config.env.env_id, **env_kwargs)
+        #         origin_obs_space = tmp_env.observation_space
+        #         tmp_env.close()
+        #         self.agents[env_name] = instantiate_from_config(
+        #             env_config.agent,
+        #             model=self.model,
+        #             dc=self.dc,
+        #             origin_obs_space=origin_obs_space,
+        #             video_dir=env_config.agent.video_dir,
+        #         ).eval().to(self.device)
         
         # 初始化数据集和对应的agent
         self.datasets = {}
@@ -160,11 +160,33 @@ class Evaluator:
         # 在环境上评估
         if self.env_configs is not None:
             for env_name, env_config in self.env_configs.items():
+                env_kwargs = OmegaConf.to_object(env_config.env.env_kwargs)
+                other_kwargs = OmegaConf.to_object(env_config.env.other_kwargs)
+                env = instantiate_from_config(
+                    env_config.env,
+                    env_kwargs=env_kwargs,
+                    other_kwargs=other_kwargs,
+                    wrappers=[FlattenRGBDObservationWrapper],
+                )
+
+                tmp_env = gym.make(env_config.env.env_id, **env_kwargs)
+                origin_obs_space = tmp_env.observation_space
+                tmp_env.close()
+                agent = instantiate_from_config(
+                    env_config.agent,
+                    model=self.model,
+                    dc=self.dc,
+                    origin_obs_space=origin_obs_space,
+                    video_dir=env_config.agent.video_dir,
+                ).eval().to(self.device)
+
                 env_metrics = evaluate_on_env(
-                    num_episodes, self.agents[env_name], self.envs[env_name], 
+                    num_episodes, agent, env, 
                     self.device, env_config.env.sim_backend
                 )
                 metrics[f"env_{env_name}"] = env_metrics
+
+                env.close()
         
         # 在数据集上评估
         if self.dataset_configs is not None:
@@ -182,7 +204,8 @@ class Evaluator:
         
     def close(self):
         """关闭所有环境"""
-        for env in self.envs.values():
-            env.close()
+        pass
+        # for env in self.envs.values():
+        #     env.close()
         
         
