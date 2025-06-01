@@ -1,41 +1,23 @@
 import os
 import random
-import time
+from datetime import datetime
 import argparse
 from omegaconf import OmegaConf
-from collections import defaultdict
-from dataclasses import dataclass, field
-from typing import List, Optional
 
-import gymnasium as gym
 import numpy as np
 import torch
-import torch.optim as optim
-from tqdm import tqdm
-import tyro
 
-from diffusers.optimization import get_scheduler
-from diffusers.training_utils import EMAModel
-from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
-from mani_skill.utils import common
-from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torch.utils.tensorboard import SummaryWriter
-
-from diffusion_policy.make_env import make_eval_envs
 
 import odpc.envs
 from odpc.data.data_conversion import DataConversion
-from odpc.data.odpc_dataset import ODPCDataset
 from odpc.models.odpc import ODPCModel
-from odpc.models.agent import ODPCAgent
 from odpc.utils.utils import instantiate_from_config
 from odpc.utils.evaluate import Evaluator
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp-name", type=str, default='odpc-valid')
     parser.add_argument("--config", type=str, default="configs/odpc/base.yaml")
     parser.add_argument("--ckpt-path", type=str, default=None)
     parser.add_argument("--use-ema", action="store_true")
@@ -47,8 +29,6 @@ def get_args():
     cli = OmegaConf.from_dotlist(unknown)
     cfg = OmegaConf.merge(cfg, cli)
  
-    cfg.exp_name = args.exp_name
-    
     return args, cfg
 
 
@@ -61,6 +41,9 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = cfg.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    save_dir = f"runs/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    os.makedirs(save_dir)
+    OmegaConf.save(cfg, f"{save_dir}/config.yaml", resolve=True)
 
     if cfg.track:
         import wandb
@@ -76,9 +59,9 @@ if __name__ == "__main__":
             job_type="eval",
         )
     
-    writer = SummaryWriter(f"runs/{cfg.exp_name}")
+    writer = SummaryWriter(save_dir)
     
-    data_conversion = instantiate_from_config(cfg.data_conversion)
+    data_conversion: DataConversion = instantiate_from_config(cfg.data_conversion)
 
     model: ODPCModel = instantiate_from_config(cfg.model).to(device)
 

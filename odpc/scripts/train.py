@@ -1,8 +1,8 @@
 import os
-import time
 import random
 import argparse
 from tqdm import tqdm
+from datetime import datetime
 from omegaconf import OmegaConf
 
 import numpy as np
@@ -16,8 +16,6 @@ from diffusers.training_utils import EMAModel
 
 import gymnasium as gym
 from mani_skill.utils import common
-from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
-from diffusion_policy.make_env import make_eval_envs
 from diffusion_policy.utils import IterationBasedBatchSampler, worker_init_fn
 
 import odpc.envs
@@ -30,7 +28,6 @@ from odpc.utils.evaluate import Evaluator
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/odpc/base.yaml")
-    parser.add_argument("--exp-name", type=str, default="odpc-train")
     parser.add_argument("--num-eval-episodes", type=int, default=100)
     args, unknown = parser.parse_known_args()
 
@@ -38,8 +35,6 @@ def get_args():
     cli = OmegaConf.from_dotlist(unknown)
     cfg = OmegaConf.merge(cfg, cli)
 
-    cfg.exp_name = args.exp_name
- 
     return args, cfg
 
 
@@ -50,7 +45,7 @@ def copy_ema_buffers():
 
 def save_ckpt():
     if step % cfg.trainer.save_freq == 0:
-        os.makedirs(f"runs/{cfg.exp_name}/checkpoints", exist_ok=True)
+        os.makedirs(f"{save_dir}/checkpoints", exist_ok=True)
         ema.copy_to(ema_model.parameters())
         copy_ema_buffers()
         torch.save(
@@ -58,7 +53,7 @@ def save_ckpt():
                 "model": model.state_dict(),
                 "ema_model": ema_model.state_dict(),
             },
-            f"runs/{cfg.exp_name}/checkpoints/{step}.pt",
+            f"{save_dir}/checkpoints/{step}.pt",
         )
 
 
@@ -99,6 +94,10 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = cfg.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    save_dir = f"runs/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    os.makedirs(save_dir)
+    OmegaConf.save(cfg, f"{save_dir}/config.yaml", resolve=True)
+
 
     if cfg.track:
         import wandb
@@ -114,7 +113,7 @@ if __name__ == "__main__":
             job_type="train",
         )
 
-    writer = SummaryWriter(f"runs/{cfg.exp_name}")
+    writer = SummaryWriter(save_dir)
     
     dataset = instantiate_from_config(cfg.train_dataset)
     sampler = RandomSampler(dataset, replacement=False)
@@ -128,7 +127,7 @@ if __name__ == "__main__":
         persistent_workers=(cfg.trainer.num_dataload_workers > 0),
     )
 
-    data_conversion = instantiate_from_config(cfg.data_conversion)
+    data_conversion: DataConversion = instantiate_from_config(cfg.data_conversion)
 
     model: ODPCModel = instantiate_from_config(cfg.model).to(device)
     
