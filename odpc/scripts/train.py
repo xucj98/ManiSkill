@@ -139,7 +139,7 @@ if __name__ == "__main__":
     ema_model.eval()
 
     # 创建evaluator
-    evaluator: Evaluator = instantiate_from_config(cfg.evaluator, model=model, dc=data_conversion)
+    evaluator: Evaluator = instantiate_from_config(cfg.evaluator, model=ema_model, dc=data_conversion)
 
     model.train()
     pbar = tqdm(total=cfg.trainer.total_iters)
