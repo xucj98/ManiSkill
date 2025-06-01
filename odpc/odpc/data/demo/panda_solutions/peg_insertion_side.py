@@ -23,8 +23,16 @@ def main():
     env.close()
 
 
-def solve(env: PegInsertionSideEnv, seed=None, debug=False, vis=False):
+def solve(
+        env: PegInsertionSideEnv, 
+        seed: int = None, 
+        debug: bool = False, 
+        vis: bool = False, 
+        start_after_grasp: bool = False,
+        pre_insert_aug: float = 0.,
+):
     env.reset(seed=seed)
+    start_step = 0
     assert env.unwrapped.control_mode in [
         "pd_joint_pos",
         "pd_joint_pos_vel",
@@ -70,6 +78,8 @@ def solve(env: PegInsertionSideEnv, seed=None, debug=False, vis=False):
 
     res = planner.move_to_pose_with_screw(reach_pose)
     if res == -1 or res[-1]['elapsed_steps'].item() > 350: return -1
+    if start_after_grasp:
+        start_step = res[-1]['elapsed_steps'].item()
 
     # -------------------------------------------------------------------------- #
     # Align Peg
@@ -79,13 +89,16 @@ def solve(env: PegInsertionSideEnv, seed=None, debug=False, vis=False):
     ee_cur_pose = reach_pose
 
     # coarse insert pose
-    # offset = 0.05 + env.peg_half_sizes[0, 0].item()
-    # rand_offset = np.random.uniform(low=-1, high=1, size=(3,)) * [0.02, 0.05, 0.05]
-    # coarse_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0])
-    # delta_pose = coarse_insert_pose * env.peg.pose.inv()
-    # ee_cur_pose = delta_pose * ee_cur_pose
-    # res = planner.move_to_pose_with_screw(ee_cur_pose)
-    # if res == -1: return res
+    if pre_insert_aug > 0 and np.random.rand() < pre_insert_aug:
+        offset = 0.03 + env.peg_half_sizes[0, 0].item()
+        rand_offset = np.random.uniform(low=-1, high=1, size=(3,)) * [0.02, 0.05, 0.05]
+        coarse_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0] + rand_offset)
+        delta_pose = coarse_insert_pose * env.peg.pose.inv()
+        ee_cur_pose = delta_pose * ee_cur_pose
+        res = planner.move_to_pose_with_screw(ee_cur_pose)
+        if res == -1: return res
+        start_step = res[-1]['elapsed_steps'].item()
+        
 
     # fine insert pose
     offset = 0.01 + env.peg_half_sizes[0, 0].item()
@@ -106,6 +119,7 @@ def solve(env: PegInsertionSideEnv, seed=None, debug=False, vis=False):
     if res == -1: return res
 
     planner.close()
+    res[-1]['start_step'] = start_step
     return res
 
 

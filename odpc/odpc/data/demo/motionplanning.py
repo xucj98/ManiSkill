@@ -1,21 +1,28 @@
-import multiprocessing as mp
 import os
-from copy import deepcopy
+import os.path as osp
 import time
-from omegaconf import OmegaConf
-import gymnasium as gym
+import json
 import numpy as np
 from tqdm import tqdm
-import os.path as osp
+from copy import deepcopy
+import gymnasium as gym
+import multiprocessing as mp
+
+from omegaconf import OmegaConf
+
 from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.trajectory.merge_trajectory import merge_trajectories
 from mani_skill.examples.motionplanning.panda.solutions import solvePushCube, solvePickCube, solveStackCube, solvePegInsertionSide, solvePlugCharger, solvePullCubeTool, solveLiftPegUpright, solvePullCube, solveDrawTriangle, solveDrawSVG
+
+import odpc.envs
+from odpc.data.demo.panda_solutions import solvePegInsertionSidev2
 
 MP_SOLUTIONS = {
     "DrawTriangle-v1": solveDrawTriangle,
     "PickCube-v1": solvePickCube,
     "StackCube-v1": solveStackCube,
     "PegInsertionSide-v1": solvePegInsertionSide,
+    "PegInsertionSide-v2": solvePegInsertionSidev2,
     "PlugCharger-v1": solvePlugCharger,
     "PushCube-v1": solvePushCube,
     "PullCubeTool-v1": solvePullCubeTool,
@@ -42,7 +49,7 @@ def _main(args, proc_id: int = 0, start_seed: int = 0) -> str:
         new_traj_name = new_traj_name + "." + str(proc_id)
     env = RecordEpisode(
         env,
-        output_dir=osp.join(args.record_dir, env_id, "motionplanning"),
+        output_dir=args.record_dir,
         trajectory_name=new_traj_name, save_video=args.save_video,
         source_type="motionplanning",
         source_desc="official motion planning solution from ManiSkill contributors",
@@ -57,11 +64,20 @@ def _main(args, proc_id: int = 0, start_seed: int = 0) -> str:
     seed = start_seed
     successes = []
     solution_episode_lengths = []
+    start_steps = []
     failed_motion_plans = 0
     passed = 0
     while True:
         try:
-            res = solve(env, seed=seed, debug=False, vis=True if args.vis else False)
+            solve_kwargs = {
+                "env": env,
+                "seed": seed,
+                "debug": False,
+                "vis": True if args.vis else False
+            }
+            if hasattr(args, "solve_kwargs") and args.solve_kwargs is not None:
+                solve_kwargs.update(args.solve_kwargs)
+            res = solve(**solve_kwargs)
         except Exception as e:
             print(f"Cannot find valid solution because of an error in motion planning solution: {e}")
             res = -1
@@ -81,6 +97,7 @@ def _main(args, proc_id: int = 0, start_seed: int = 0) -> str:
                 env.flush_video(save=False)
             continue
         else:
+            start_steps.append(res[-1]["start_step"] if res != -1 and "start_step" in res[-1] else 0)
             env.flush_trajectory()
             if args.save_video:
                 env.flush_video()
@@ -99,6 +116,14 @@ def _main(args, proc_id: int = 0, start_seed: int = 0) -> str:
             if passed == args.num_traj:
                 break
     env.close()
+
+    with open(os.path.join(args.record_dir, f"{new_traj_name}.json"), 'r') as f:
+        json_data = json.load(f)
+    for episode_data, start_step in zip(json_data['episodes'], start_steps):
+        episode_data['start_step'] = start_step
+    with open(os.path.join(args.record_dir, f"{new_traj_name}.json"), 'w') as f:
+        json.dump(json_data, f)
+
     return output_h5_path
 
 def main(args):

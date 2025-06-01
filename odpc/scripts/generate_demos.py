@@ -1,19 +1,14 @@
 import os
-import shutil
 import argparse
 import multiprocessing as mp
 from omegaconf import OmegaConf
 from dataclasses import dataclass
 
-from mani_skill.trajectory.replay_trajectory import main as replay_trajectory
-from mani_skill.trajectory.replay_trajectory import Args as ReplayTrajectoryArgs
 
-import odpc.envs
-import odpc.data.demo.panda_solutions as panda_solutions
-from odpc.data.demo.motionplanning import main as motion_planning, MP_SOLUTIONS
-
-MP_SOLUTIONS["PegInsertionSide-v2"] = panda_solutions.solvePegInsertionSide
-
+from odpc.data.demo.motionplanning import main as motion_planning
+from odpc.data.demo.clip_demo import main as clip_demo
+from odpc.data.demo.replay_trajectory import main as replay_trajectory
+from odpc.data.demo.replay_trajectory import Args as ReplayTrajectoryArgs
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -35,15 +30,22 @@ if __name__ == "__main__":
     # todo: 支持 xarm6, 
     cfg.motion_planning_args.record_dir = args.record_dir
     motion_planning(cfg.motion_planning_args)
+    traj_path = os.path.join(args.record_dir, f"{cfg.traj_name}.h5")
     
-    src_dir = os.path.join(args.record_dir, cfg.env_id, "motionplanning")
-    
+    if cfg.control_mode != cfg.motion_planning_args.env_kwargs.control_mode:
+        cfg.control_mode = cfg.motion_planning_args.env_kwargs.control_mode
+        #todo: 转换控制模式
+
+    clip_demo(traj_path)
+
+    traj_path = traj_path.replace('.h5', f'_clip.h5')
     replay_trajectory_args = ReplayTrajectoryArgs(
-        traj_path=os.path.join(src_dir, f"{cfg.traj_name}.h5"),
+        traj_path=traj_path,
         obs_mode=cfg.obs_mode,
         target_control_mode=cfg.control_mode,
         save_traj=True,
         allow_failure=not cfg.only_count_success,
         num_envs=cfg.num_procs,
+        use_env_states=True,
     )
     replay_trajectory(replay_trajectory_args)

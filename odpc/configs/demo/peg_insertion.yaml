@@ -28,3 +28,6 @@ motion_planning_args:
   save_video: False
   traj_name: ${traj_name}
   num_procs: ${num_procs}
+  solve_kwargs:
+    pre_insert_aug: 0.5
+    start_after_grasp: True
