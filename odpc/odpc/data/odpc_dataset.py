@@ -12,6 +12,7 @@ class ODPCDataset(Dataset):
             pred_horizon,
             slices_step=1,
             num_traj=None,
+            clip_traj=False,
     ):
         self.data_path = data_path
 
@@ -40,9 +41,12 @@ class ODPCDataset(Dataset):
                 poses_world_peg = file[f'{traj_key}/obs/extra/peg_pose']
                 # cam0_extrinsic = file[f'{traj_key}/obs/sensor_param/base_camera/extrinsic_cv']
 
-                peg_z = poses_world_peg[:-1, 2]
-                peg_z = peg_z - np.min(peg_z)
-                traj_start = np.where(peg_z > 1e-3)[0][0]
+                if clip_traj:
+                    peg_z = poses_world_peg[:-1, 2]
+                    peg_z = peg_z - np.min(peg_z)
+                    traj_start = np.where(peg_z > 1e-3)[0][0]
+                else:
+                    traj_start = 0
 
                 # |o|o|                             observations: 2
                 # | |a|a|a|a|a|a|a|a|               actions executed: 8

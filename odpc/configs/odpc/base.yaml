@@ -28,6 +28,7 @@ train_dataset:
   obs_horizon: ${obs_horizon}
   pred_horizon: ${pred_horizon}
   num_traj: 1000
+  clip_traj: false
 
 data_conversion:
   _target_: odpc.data.data_conversion.DataConversion
@@ -104,6 +105,7 @@ evaluator:
       obs_horizon: ${obs_horizon}
       pred_horizon: ${pred_horizon}
       num_traj: 100
+      clip_traj: false
     # ood: todo
 
 
