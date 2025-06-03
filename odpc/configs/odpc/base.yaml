@@ -14,6 +14,8 @@ control_mode: pd_ee_pose
 
 num_envs: 20
 
+save_dir: runs/${exp_name}
+
 trainer:
   total_iters: 400010
   batch_size: 256
@@ -87,7 +89,7 @@ evaluator:
           max_episode_steps: 300
         other_kwargs:
           obs_horizon: ${obs_horizon}
-        video_dir: runs/${exp_name}/videos/ind_render
+        video_dir: ${save_dir}/videos/ind_render
       agent:
         _target_: odpc.models.agent.ODPCAgent
         num_envs: ${num_envs}
@@ -95,7 +97,7 @@ evaluator:
         pred_horizon: ${pred_horizon}
         control_mode: ${control_mode}
         robot_uid: panda
-        video_dir: runs/${exp_name}/videos/ind_pred
+        video_dir: ${save_dir}/videos/ind_pred
     # ood: todo
 
   dataset_configs:

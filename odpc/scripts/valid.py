@@ -42,6 +42,7 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     save_dir = f"runs/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    cfg.save_dir = save_dir
     os.makedirs(save_dir)
     OmegaConf.save(cfg, f"{save_dir}/config.yaml", resolve=True)
 

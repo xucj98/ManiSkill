@@ -167,12 +167,13 @@ class Evaluator:
                     env_kwargs=env_kwargs,
                     other_kwargs=other_kwargs,
                     wrappers=[FlattenRGBDObservationWrapper],
+                    video_dir=env_config.env.video_dir,
                 )
-
+          
                 tmp_env = gym.make(env_config.env.env_id, **env_kwargs)
                 origin_obs_space = tmp_env.observation_space
                 tmp_env.close()
-                agent = instantiate_from_config(
+                agent: ODPCAgent = instantiate_from_config(
                     env_config.agent,
                     model=self.model,
                     dc=self.dc,
