@@ -48,9 +48,10 @@ class ODPCAgent(nn.Module):
         self.control_mode = control_mode
         self.video_dir = video_dir
 
+        self._video_writer = None
         if video_dir is not None:
             os.makedirs(video_dir, exist_ok=True)
-
+            
         self.stages = torch.zeros(num_envs)
         self.action_step = 0
         self.model_action = torch.zeros((num_envs, pred_horizon, dc.control_dim))
@@ -208,9 +209,12 @@ class ODPCAgent(nn.Module):
     def odpc_exec(self, obs_seq, state_dict):
         ee_pose = state_dict["extra"]["tcp_pose"][:, 0, :]
         base_pose = state_dict["extra"]["base_pose"][:, 0, :]
+        cam_obj_pose_cur = state_dict["extra"]["cam0_peg_pose"][..., :1, :]
 
         # Receding Horizon Control
-        if self.action_step % self.act_horizon == 0:
+        action_step = self.action_step % self.act_horizon
+
+        if action_step == 0:
             pred = self.model.get_action(obs_seq)
             self.odpc_target_pose = self.dc.pred_to_target_pose(
                 pred=pred.clone().detach(),
@@ -218,38 +222,14 @@ class ODPCAgent(nn.Module):
                 poses_base=state_dict["extra"]["base_pose"][..., :1, :],
                 poses_camera_world=state_dict["extra"]["cam0_world_pose"][..., :1, :],
             )
-
             if self.video_dir is not None:
-                images = self.dc.pred_to_visualize(
-                    rgb=obs_seq["rgb"][..., :3, :, :],
+                self.cam_obj_pose = self.dc.pred_to_cam_obj_pose(
                     pred=pred.clone().detach(),
-                    poses_cam_obj_cur=state_dict["extra"]["cam0_peg_pose"][..., :1, :],
+                    poses_cam_obj_cur=cam_obj_pose_cur,
                 )
-                grid = self.make_grid(images)
-                cv2.imwrite(f"{self.video_dir}/{self.action_step:04d}-pred.jpg", grid[:, :, ::-1])
-
-        return self.odpc_target_pose[..., self.action_step % self.act_horizon, :]
-
-
-    def get_action(self, obs_seq, channel_last=False):
-        _, state_dict = self.state_to_dict(obs_seq["state"], self.origin_obs_space)
-        if channel_last:
-            obs_seq["rgb"] = obs_seq["rgb"].permute(0, 1, 4, 2, 3)
-            obs_seq["depth"] = obs_seq["depth"].permute(0, 1, 4, 2, 3)       
-        
-        mp_target_pose = self.grasp(state_dict)
-        odpc_target_pose = self.odpc_exec(obs_seq, state_dict)
-        cond = self.stages.to(odpc_target_pose.device) == 5
-        target_pose = torch.where(cond[:, None], odpc_target_pose, mp_target_pose)
 
         if self.video_dir is not None:
-            base_pose = state_dict["extra"]["base_pose"][..., 0, :]
-            ee_pose = state_dict["extra"]["tcp_pose"][..., 0, :]
-            camera_world_pose = state_dict["extra"]["cam0_world_pose"][..., 0, :]
-            camera_target_pose = pose_multiply(camera_world_pose, base_pose, target_pose)
-            camera_target_pose = camera_target_pose.cpu().numpy()
-            camera_ee_pose = pose_multiply(camera_world_pose, ee_pose)
-            camera_ee_pose = camera_ee_pose.cpu().numpy()
+            cam_obj_pose = self.cam_obj_pose[..., action_step:, :]
             
             rgb = obs_seq["rgb"][:, 0, :3, :, :].cpu().numpy()
             rgb = rgb.transpose(0, 2, 3, 1)
@@ -261,17 +241,35 @@ class ODPCAgent(nn.Module):
                 [0, h, h],
                 [0, 0, 1],
             ])
-
+            
+            n, t = cam_obj_pose.shape[:2]
             images = []
-            for i in range(self.num_envs):
+            for i in range(n):
                 image = rgb[i]
-                image = image * 0.3 + visualize_pose(image, camera_ee_pose[i], intrinsic) * 0.7
-                image = visualize_pose(image, camera_target_pose[i], intrinsic)
+                for j in range(t):
+                    image = visualize_pose(image, cam_obj_pose[i, j].cpu().numpy(), intrinsic)
+                image = visualize_pose(image, cam_obj_pose_cur[i, 0].cpu().numpy(), intrinsic)
                 images.append(image.astype(np.uint8))
             images = np.stack(images, axis=0)
             
             grid = self.make_grid(images)
-            cv2.imwrite(f"{self.video_dir}/{self.action_step:04d}.jpg", grid[:, :, ::-1])
+            self._video_writer.write(grid[:, :, ::-1])
+
+        return self.odpc_target_pose[..., action_step, :]
+
+
+    def get_action(self, obs_seq, channel_last=False):
+        _, state_dict = self.state_to_dict(obs_seq["state"], self.origin_obs_space)
+        if channel_last:
+            # 将 rgb 的形状从 (..., H, W, 3) 转换为 (..., 3, H, W)
+            obs_seq["rgb"] = obs_seq["rgb"].permute(0, 1, 4, 2, 3)
+            obs_seq["depth"] = obs_seq["depth"].permute(0, 1, 4, 2, 3)       
+        
+        # ee 在 base 坐标系下的 target 坐标
+        mp_target_pose = self.grasp(state_dict)
+        odpc_target_pose = self.odpc_exec(obs_seq, state_dict)
+        cond = self.stages.to(odpc_target_pose.device) == 5
+        target_pose = torch.where(cond[:, None], odpc_target_pose, mp_target_pose)
 
         action = self.target_pose_to_action(
             target_pose=target_pose,
@@ -288,6 +286,30 @@ class ODPCAgent(nn.Module):
 
         return action[:, None, :]
 
-    def reset(self, obs=None):
+    def reset(self, obs=None, channel_last=False):
         self.stages[:] = 0
         self.action_step = 0
+
+        if self._video_writer is not None:
+            self._video_writer.release()
+
+        if self.video_dir is not None:
+            # 搜索视频目录下所有视频文件，找到ID最大的那个，+1后设置为当前视频文件的ID
+            video_files = os.listdir(self.video_dir)
+            video_files = [int(file.split('.')[0]) for file in video_files]
+            video_id = max(video_files) + 1 if len(video_files) > 0 else 0
+            h, w = obs["rgb"].shape[-3:-1] if channel_last else obs["rgb"].shape[-2:]
+            nh = int(np.sqrt(self.num_envs))
+            nw = int(np.ceil(self.num_envs / nh))
+            h = h * nh
+            w = w * nw
+            self._video_writer = cv2.VideoWriter(
+                f"{self.video_dir}/{video_id:04d}.mp4",
+                cv2.VideoWriter_fourcc(*'mp4v'),
+                20,
+                (w, h),
+            )
+    
+    def close(self):
+        if self._video_writer is not None:
+            self._video_writer.release()

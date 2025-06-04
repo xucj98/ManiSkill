@@ -26,7 +26,7 @@ def evaluate_on_env(
     with torch.no_grad():
         eval_metrics = defaultdict(list)
         obs, info = eval_envs.reset()
-        agent.reset(obs)
+        agent.reset(obs, channel_last=True)
         eps_count = 0
         while eps_count < n:
             obs = common.to_tensor(obs, device)
@@ -50,7 +50,7 @@ def evaluate_on_env(
                 if progress_bar:
                     pbar.update(eval_envs.num_envs)
                 obs, info = eval_envs.reset()
-                agent.reset(obs)
+                agent.reset(obs, channel_last=True)
                 
     for k in eval_metrics.keys():
         eval_metrics[k] = np.stack(eval_metrics[k])
@@ -111,35 +111,7 @@ class Evaluator:
         self.env_configs = env_configs
         self.dataset_configs = dataset_configs
         self.device = next(model.parameters()).device
-        
-        # 初始化环境和agent
-        # self.envs = {}
-        # self.agents = {}
-        
-        # if self.env_configs is not None:
-        #     for env_name, env_config in self.env_configs.items():
-        #         # 创建环境
-        #         env_kwargs = OmegaConf.to_object(env_config.env.env_kwargs)
-        #         other_kwargs = OmegaConf.to_object(env_config.env.other_kwargs)
-        #         self.envs[env_name] = instantiate_from_config(
-        #             env_config.env,
-        #             env_kwargs=env_kwargs,
-        #             other_kwargs=other_kwargs,
-        #             wrappers=[FlattenRGBDObservationWrapper],
-        #         )
-               
-        #         # 创建agent
-        #         tmp_env = gym.make(env_config.env.env_id, **env_kwargs)
-        #         origin_obs_space = tmp_env.observation_space
-        #         tmp_env.close()
-        #         self.agents[env_name] = instantiate_from_config(
-        #             env_config.agent,
-        #             model=self.model,
-        #             dc=self.dc,
-        #             origin_obs_space=origin_obs_space,
-        #             video_dir=env_config.agent.video_dir,
-        #         ).eval().to(self.device)
-        
+         
         # 初始化数据集和对应的agent
         self.datasets = {}
         
@@ -188,6 +160,7 @@ class Evaluator:
                 metrics[f"env_{env_name}"] = env_metrics
 
                 env.close()
+                agent.close()
         
         # 在数据集上评估
         if self.dataset_configs is not None:
@@ -206,7 +179,5 @@ class Evaluator:
     def close(self):
         """关闭所有环境"""
         pass
-        # for env in self.envs.values():
-        #     env.close()
         
         

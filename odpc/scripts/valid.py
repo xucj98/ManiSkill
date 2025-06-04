@@ -19,7 +19,7 @@ from odpc.utils.evaluate import Evaluator
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/odpc/base.yaml")
-    parser.add_argument("--ckpt-path", type=str, default=None)
+    parser.add_argument("--ckpt-path", type=str, required=True)
     parser.add_argument("--use-ema", action="store_true")
     parser.add_argument("--num-eval-episodes", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=256)
@@ -43,6 +43,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     save_dir = f"runs/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     cfg.save_dir = save_dir
+    print(f"save_dir: {os.path.abspath(save_dir)}")
+    
     os.makedirs(save_dir)
     OmegaConf.save(cfg, f"{save_dir}/config.yaml", resolve=True)
 

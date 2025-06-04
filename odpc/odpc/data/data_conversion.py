@@ -219,6 +219,40 @@ class DataConversion:
         else:
             raise NotImplementedError
     
+    @torch.no_grad()
+    def pred_to_cam_obj_pose(
+        self,
+        pred: torch.Tensor,
+        poses_cam_obj_cur: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Args:
+            pred: nn prediction, tensor of shape (..., T, D)
+            poses_cam_obj_cur: current object poses in camera, tensor of shape (..., 1, 7)
+
+        Returns:
+            object poses in camera, tensor of shape (..., T, 7)
+        """
+        assert self.frame in ["camera_first", "camera_cur"]
+        assert pred.ndim == 3
+
+        pred = self.pred_to_quaternion(pred)
+
+        if self.delta_pred == "abs":
+            poses_cam_obj = pred
+        elif self.delta_pred == "rel_to_first":
+            poses_cam_obj = pose_multiply(pred, poses_cam_obj_cur)
+        elif self.delta_pred == "rel_to_prev":
+            # Delta_1(t) = Delta_2(t) * Delta_2(t-1) * ... * Delta_2(1)
+            t = pred.shape[-2]
+            pred = pred.clone()
+            for i in range(1, t):
+                pred[..., i, :] = pose_multiply(pred[..., i, :], pred[..., i - 1, :])
+            poses_cam_obj = pose_multiply(pred, poses_cam_obj_cur)
+        else:
+            raise NotImplementedError
+
+        return poses_cam_obj
 
     @torch.no_grad()
     def pred_to_visualize(
@@ -238,9 +272,10 @@ class DataConversion:
         Returns:
             np.ndarray of shape (B, H, W, 3)
         """
-        assert self.frame in ["camera_first", "camera_cur"]
-        assert pred.ndim == 3
-
+        poses_cam_obj = self.pred_to_cam_obj_pose(pred, poses_cam_obj_cur)
+        poses_cam_obj = torch.cat((poses_cam_obj_cur, poses_cam_obj), dim=-2)
+        poses_cam_obj = poses_cam_obj.cpu().numpy()
+        
         rgb = rgb.squeeze(dim=-4)
         dims = list(range(rgb.ndim))
         rgb = rgb.permute(*dims[:-3], -2, -1, -3)
@@ -254,25 +289,6 @@ class DataConversion:
                 [0, h, h],
                 [0, 0, 1],
             ], dtype=np.float32)
-
-        pred = self.pred_to_quaternion(pred)
-
-        if self.delta_pred == "abs":
-            poses_cam_obj = pred
-        elif self.delta_pred == "rel_to_first":
-            poses_cam_obj = pose_multiply(pred, poses_cam_obj_cur)
-        elif self.delta_pred == "rel_to_prev":
-            # Delta_1(t) = Delta_2(t) * Delta_2(t-1) * ... * Delta_2(1)
-            t = pred.shape[-2]
-            pred = pred.clone()
-            for i in range(1, t):
-                pred[..., i, :] = pose_multiply(pred[..., i, :], pred[..., i - 1, :])
-            poses_cam_obj = pose_multiply(pred, poses_cam_obj_cur)
-        else:
-            raise NotImplementedError
-
-        poses_cam_obj = torch.cat((poses_cam_obj_cur, poses_cam_obj), dim=-2)
-        poses_cam_obj = poses_cam_obj.cpu().numpy()
 
         n, t = poses_cam_obj.shape[:2]
         images = []
@@ -308,3 +324,5 @@ class DataConversion:
             raise NotImplementedError
 
         return torch.cat((pos, rot), dim=-1)
+
+    
