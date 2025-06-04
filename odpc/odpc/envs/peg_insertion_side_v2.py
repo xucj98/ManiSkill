@@ -4,6 +4,7 @@ import numpy as np
 import sapien
 import torch
 
+import gymnasium as gym
 from mani_skill import PACKAGE_ASSET_DIR
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import sapien_utils
@@ -53,7 +54,12 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
         self.camera_mode = camera_mode
         self._clearance = clearance
         super().__init__(*args, robot_uids=robot_uids, **kwargs)
-
+        low = self.action_space.low
+        low[np.isnan(low)] = -10.
+        high = self.action_space.high
+        high[np.isnan(high)] = 10.
+        self.action_space = gym.spaces.Box(low=low, high=high, dtype=self.action_space.dtype)
+      
     def _load_scene(self, options: dict):
         sapien.physx.set_default_material(static_friction=20.0, dynamic_friction=20.0, restitution=0.0)
         super()._load_scene(options)
