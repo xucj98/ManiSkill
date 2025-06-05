@@ -121,7 +121,7 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
                 self.device,
                 lock_x=True,
                 lock_y=True,
-                bounds=(np.pi / 2 - np.pi / 8, np.pi / 2 + np.pi / 8),
+                bounds=(np.pi / 2 - np.pi / 8, np.pi / 2 - np.pi / 16),
             )
             self.box.set_pose(Pose.create_from_pq(pos, quat))
 

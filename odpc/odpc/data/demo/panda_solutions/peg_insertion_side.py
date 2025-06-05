@@ -90,8 +90,8 @@ def solve(
 
     # coarse insert pose
     if pre_insert_aug > 0 and np.random.rand() < pre_insert_aug:
-        offset = 0.03 + env.peg_half_sizes[0, 0].item()
-        rand_offset = np.random.uniform(low=-1, high=1, size=(3,)) * [0.02, 0.05, 0.05]
+        offset = 0.02 + env.peg_half_sizes[0, 0].item()
+        rand_offset = np.random.uniform(low=-1, high=1, size=(3,)) * [0.01, 0.05, 0.05]
         coarse_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0] + rand_offset)
         delta_pose = coarse_insert_pose * env.peg.pose.inv()
         ee_cur_pose = delta_pose * ee_cur_pose
