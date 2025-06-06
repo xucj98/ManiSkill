@@ -66,17 +66,17 @@ class ODPCAgent(nn.Module):
         else:
             raise NotImplementedError
 
-    def state_to_dict(self, state, ref_dict):
-        state_dict = {}
-        for k, v in ref_dict.items():
-            if k in ['sensor_data', 'sensor_param']:
-                continue
-            if isinstance(v, Dict):
-                state, state_dict[k] = self.state_to_dict(state, v)
-            elif isinstance(v, Box):
-                state_dict[k] = state[..., :v.shape[-1]]
-                state = state[..., v.shape[-1]:]
-        return state, state_dict
+    # def state_to_dict(self, state, ref_dict):
+    #     state_dict = {}
+    #     for k, v in ref_dict.items():
+    #         if k in ['sensor_data', 'sensor_param']:
+    #             continue
+    #         if isinstance(v, Dict):
+    #             state, state_dict[k] = self.state_to_dict(state, v)
+    #         elif isinstance(v, Box):
+    #             state_dict[k] = state[..., :v.shape[-1]]
+    #             state = state[..., v.shape[-1]:]
+    #     return state, state_dict
 
     @staticmethod
     def build_grasp_pose(approaching, closing, center):
@@ -258,23 +258,24 @@ class ODPCAgent(nn.Module):
         return self.odpc_target_pose[..., action_step, :]
 
 
-    def get_action(self, obs_seq, channel_last=False):
-        _, state_dict = self.state_to_dict(obs_seq["state"], self.origin_obs_space)
+    def get_action(self, obs, channel_last=False):
+        # _, state_dict = self.state_to_dict(obs_seq["state"], self.origin_obs_space)
         if channel_last:
             # 将 rgb 的形状从 (..., H, W, 3) 转换为 (..., 3, H, W)
-            obs_seq["rgb"] = obs_seq["rgb"].permute(0, 1, 4, 2, 3)
-            obs_seq["depth"] = obs_seq["depth"].permute(0, 1, 4, 2, 3)       
+            for sensor_data in obs["sensor_data"].values():
+                sensor_data["rgb"] = sensor_data["rgb"].permute(0, 1, 4, 2, 3)
+                sensor_data["depth"] = sensor_data["depth"].permute(0, 1, 4, 2, 3)       
         
         # ee 在 base 坐标系下的 target 坐标
-        mp_target_pose = self.grasp(state_dict)
-        odpc_target_pose = self.odpc_exec(obs_seq, state_dict)
+        mp_target_pose = self.grasp(obs)
+        odpc_target_pose = self.odpc_exec(obs["sensor_data"]["base_camera"], obs)
         cond = self.stages.to(odpc_target_pose.device) == 5
         target_pose = torch.where(cond[:, None], odpc_target_pose, mp_target_pose)
 
         action = self.target_pose_to_action(
             target_pose=target_pose,
-            base_pose=state_dict["extra"]["base_pose"][..., 0, :],
-            ee_pose=state_dict["extra"]["tcp_pose"][..., 0, :],
+            base_pose=obs["extra"]["base_pose"][..., 0, :],
+            ee_pose=obs["extra"]["tcp_pose"][..., 0, :],
             target_in_base=True,
         )
         
@@ -298,7 +299,8 @@ class ODPCAgent(nn.Module):
             video_files = os.listdir(self.video_dir)
             video_files = [int(file.split('.')[0]) for file in video_files]
             video_id = max(video_files) + 1 if len(video_files) > 0 else 0
-            h, w = obs["rgb"].shape[-3:-1] if channel_last else obs["rgb"].shape[-2:]
+            rgb = obs["sensor_data"]["base_camera"]["rgb"]
+            h, w = rgb.shape[-3:-1] if channel_last else rgb.shape[-2:]
             nh = int(np.sqrt(self.num_envs))
             nw = int(np.ceil(self.num_envs / nh))
             h = h * nh

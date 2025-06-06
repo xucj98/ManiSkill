@@ -22,7 +22,7 @@ import odpc.envs
 from odpc.utils.utils import instantiate_from_config
 from odpc.data.data_conversion import DataConversion
 from odpc.models.odpc import ODPCModel
-from odpc.utils.evaluate import Evaluator
+from odpc.evaluation.evaluate import Evaluator
 
 
 def get_args():

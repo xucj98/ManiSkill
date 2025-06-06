@@ -66,12 +66,12 @@ model:
 
 
 evaluator:
-  _target_: odpc.utils.evaluate.Evaluator
+  _target_: odpc.evaluation.evaluate.Evaluator
 
   env_configs:
     ind:
       env:
-        _target_: diffusion_policy.make_env.make_eval_envs
+        _target_: odpc.envs.factory.make_eval_envs.make_eval_envs
         env_id: PegInsertionSide-v2
         num_envs: ${num_envs}
         sim_backend: cuda

@@ -9,13 +9,12 @@ from typing import Dict
 
 import gymnasium as gym
 from mani_skill.utils import common
-from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
-from diffusion_policy.make_env import make_eval_envs
 
 from odpc.data.data_conversion import pose_multiply, DataConversion
 from odpc.models.agent import ODPCAgent
 from odpc.models.odpc import ODPCModel
 from odpc.utils.utils import instantiate_from_config
+
 
 
 def evaluate_on_env(
@@ -139,7 +138,7 @@ class Evaluator:
                     env_config.env,
                     env_kwargs=env_kwargs,
                     other_kwargs=other_kwargs,
-                    wrappers=[FlattenRGBDObservationWrapper],
+                    # wrappers=[FlattenRGBDObservationWrapper],
                     video_dir=env_config.env.video_dir,
                 )
           
