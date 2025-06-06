@@ -31,7 +31,6 @@ class ODPCAgent(nn.Module):
             self,
             model: ODPCModel,
             dc: DataConversion,
-            origin_obs_space: Dict,
             num_envs: int,
             act_horizon: int,
             pred_horizon: int,
@@ -43,7 +42,6 @@ class ODPCAgent(nn.Module):
         self.model = model
         self.dc = dc
         self.num_envs = num_envs
-        self.origin_obs_space = origin_obs_space
         self.act_horizon = act_horizon
         self.control_mode = control_mode
         self.video_dir = video_dir
@@ -66,18 +64,7 @@ class ODPCAgent(nn.Module):
         else:
             raise NotImplementedError
 
-    # def state_to_dict(self, state, ref_dict):
-    #     state_dict = {}
-    #     for k, v in ref_dict.items():
-    #         if k in ['sensor_data', 'sensor_param']:
-    #             continue
-    #         if isinstance(v, Dict):
-    #             state, state_dict[k] = self.state_to_dict(state, v)
-    #         elif isinstance(v, Box):
-    #             state_dict[k] = state[..., :v.shape[-1]]
-    #             state = state[..., v.shape[-1]:]
-    #     return state, state_dict
-
+    
     @staticmethod
     def build_grasp_pose(approaching, closing, center):
         """Build a grasp pose ()."""
@@ -259,7 +246,6 @@ class ODPCAgent(nn.Module):
 
 
     def get_action(self, obs, channel_last=False):
-        # _, state_dict = self.state_to_dict(obs_seq["state"], self.origin_obs_space)
         if channel_last:
             # 将 rgb 的形状从 (..., H, W, 3) 转换为 (..., 3, H, W)
             for sensor_data in obs["sensor_data"].values():

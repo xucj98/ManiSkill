@@ -142,14 +142,10 @@ class Evaluator:
                     video_dir=env_config.env.video_dir,
                 )
           
-                tmp_env = gym.make(env_config.env.env_id, **env_kwargs)
-                origin_obs_space = tmp_env.observation_space
-                tmp_env.close()
                 agent: ODPCAgent = instantiate_from_config(
                     env_config.agent,
                     model=self.model,
                     dc=self.dc,
-                    origin_obs_space=origin_obs_space,
                     video_dir=env_config.agent.video_dir,
                 ).eval().to(self.device)
 
