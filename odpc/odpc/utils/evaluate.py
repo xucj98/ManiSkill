@@ -50,7 +50,8 @@ def evaluate_on_env(
                 if progress_bar:
                     pbar.update(eval_envs.num_envs)
                 obs, info = eval_envs.reset()
-                agent.reset(obs, channel_last=True)
+                if eps_count < n:
+                    agent.reset(obs, channel_last=True)
                 
     for k in eval_metrics.keys():
         eval_metrics[k] = np.stack(eval_metrics[k])
