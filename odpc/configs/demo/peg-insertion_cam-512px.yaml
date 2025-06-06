@@ -1,0 +1,36 @@
+env_id: "PegInsertionSide-v2"
+obs_mode: "state_dict+rgb+depth+segmentation"
+control_mode: "pd_ee_pose"
+num_traj: 100
+only_count_success: True
+traj_name: "peg_insertion_demo"
+num_procs: 10
+shader: "default"
+
+motion_planning_args:
+  env_id: ${env_id}
+  env_kwargs:
+    clearance: 0.005
+    obs_mode: null
+    control_mode: pd_joint_pos
+    render_mode: "rgb_array"
+    sim_backend: "auto"
+    sensor_configs:
+      shader_pack: ${shader}
+      base_camera:
+        width: 512
+        height: 512
+    human_render_camera_configs:
+      shader_pack: ${shader}
+    viewer_camera_configs:
+      shader_pack: ${shader}
+  num_traj: ${num_traj}
+  only_count_success: ${only_count_success}
+  reward_mode: null
+  vis: False
+  save_video: False
+  traj_name: ${traj_name}
+  num_procs: ${num_procs}
+  solve_kwargs:
+    pre_insert_aug: 0.5
+    start_after_grasp: True

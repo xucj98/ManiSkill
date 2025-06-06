@@ -12,7 +12,7 @@ from odpc.data.demo.replay_trajectory import Args as ReplayTrajectoryArgs
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="configs/demo/peg_insertion.yaml")
+    parser.add_argument("--config", type=str, default="configs/demo/peg-insertion.yaml")
     parser.add_argument("--record_dir", type=str, default="demos")
     args, unknown = parser.parse_known_args()
 
