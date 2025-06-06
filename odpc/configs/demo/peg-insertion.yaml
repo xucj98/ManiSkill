@@ -3,7 +3,7 @@ obs_mode: "state_dict+rgb+depth+segmentation"
 control_mode: "pd_ee_pose"
 num_traj: 100
 only_count_success: True
-traj_name: "peg_insertion_demo"
+traj_name: "peg-insertion"
 num_procs: 10
 shader: "default"
 
