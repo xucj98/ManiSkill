@@ -24,6 +24,28 @@ trainer:
   log_freq: 1000
   num_dataload_workers: 8
 
+obs_processor_configs:
+  - _target_: odpc.data.obs_processors.ClampDepthProcessor
+    depth_threshold: 3000
+    clamp_to_zero: true
+  - _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
+  - _target_: odpc.data.obs_processors.TcpCropProcessor
+    crop_size: [128, 128]
+    padding_value: 0
+    camera_name: base_camera
+    output_postfix: _crop
+
+act_processor_configs:
+  - _target_: odpc.data.act_processors.ODPCProcessor
+    dc_config: 
+      _target_: odpc.data.data_conversion.DataConversion
+      frame: camera_first
+      delta_pred: rel_to_prev
+      rot_rep: axis_angle
+      control_mode: ${control_mode}
+      dt: 0.05
+    output_key: actions
+
 train_dataset:
   _target_: odpc.data.odpc_dataset.ODPCDataset
   data_path: demos/peg_insertion_demo.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
@@ -31,6 +53,8 @@ train_dataset:
   pred_horizon: ${pred_horizon}
   num_traj: 1000
   clip_traj: false
+  obs_processor_configs: ${obs_processor_configs}
+  act_processor_configs: ${act_processor_configs}
 
 data_conversion:
   _target_: odpc.data.data_conversion.DataConversion
@@ -46,14 +70,24 @@ model:
   pred_horizon: ${pred_horizon}
   output_dim: 6
   visual_encoder_config:
-    _target_: odpc.models.visual_encoder.Resnet18Encoder
-    in_channels: 4
-    out_dim: 256
-    depth_clamp: 3000
+    _target_: odpc.models.vision.Resnet18Encoder
+    obs_meta:
+      base_camera:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb
+        depth: sensor_data.base_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 256
+      base_camera_crop:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb_crop
+        depth: sensor_data.base_camera.depth_crop
+        shape: [1, 4, 128, 128]
+        output_dim: 256
   noise_pred_net_config:
     _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
     input_dim: ${model.output_dim}
-    global_cond_dim: 256
+    global_cond_dim: 512
     diffusion_step_embed_dim: 64
     down_dims: [64, 128, 256]
     n_groups: 8
@@ -98,6 +132,7 @@ evaluator:
         control_mode: ${control_mode}
         robot_uid: panda
         video_dir: ${save_dir}/videos/ind_pred
+        obs_processor_configs: ${obs_processor_configs}
     # ood: todo
 
   dataset_configs:
@@ -108,6 +143,8 @@ evaluator:
       pred_horizon: ${pred_horizon}
       num_traj: 100
       clip_traj: false
+      obs_processor_configs: ${obs_processor_configs}
+      act_processor_configs: ${act_processor_configs}
     # ood: todo
 
 

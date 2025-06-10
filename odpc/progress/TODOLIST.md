@@ -18,12 +18,12 @@
     - [ ] backbone
         - [ ] DINO v2
         - [ ] DP3
-    - [ ] zoom in 的方式增加observation
+    - [x] zoom in 的方式增加observation
 
-- [ ] 轨迹数据优化
+- [x] 轨迹数据优化
     - [x] 从指定时间点后开始记录轨迹
     - [x] Peg 任意 3D pose 初始化
-    - [ ] 相机的位置调整，避免遮挡
+    - [x] 相机的位置调整，避免遮挡
 
 - [ ] 消融实验
     - [ ] OOD评估

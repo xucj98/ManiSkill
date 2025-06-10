@@ -97,7 +97,6 @@ def crop_image_around_pixel(
 class TcpCropProcessor(BaseObsProcessor):
     def __init__(
             self, 
-            obs_meta: dict,
             crop_size: tuple = (128, 128),    # (H, W) for RGB crop
             padding_value: int = 0,
             camera_name: str = "base_camera",
@@ -105,29 +104,12 @@ class TcpCropProcessor(BaseObsProcessor):
     ):
         """
         Args:
-            obs_meta: The observation metadata dictionary.
-                "sensor_data": {
-                    "base_camera": {
-                        "rgb": {"shape": ("t", 256, 256, 3), "dtype": "uint8"},
-                        "depth": {"shape": ("t", 256, 256, 1), "dtype": "int16"},
-                        "segmentation": {"shape": ("t", 256, 256, 1), "dtype": "int32"},
-                    }
-                },
-                "sensor_param": {
-                    "base_camera": {
-                        "intrinsic_cv": {"shape": ("t", 3, 3), "dtype": "float32"},
-                    }
-                },
-                "extra": {
-                    "tcp_pose": {"shape": ("t", 7), "dtype": "float32"},
-                    "cam0_world_pose": {"shape": ("t", 7), "dtype": "float32"},
-                }
             crop_size: The size of the cropped image.
             padding_value: The value to use for padding.
             camera_name: The name of the camera to crop.
             output_postfix: The postfix to add to the cropped image keys.
         """
-        super().__init__(obs_meta)
+        super().__init__()
         self.crop_size = crop_size
         self.padding_value = padding_value
         self.camera_name = camera_name

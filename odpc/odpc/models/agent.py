@@ -1,7 +1,10 @@
 import os
 import cv2
+import copy
 import trimesh.primitives
 from gymnasium.spaces import Dict, Box
+from omegaconf import DictConfig, ListConfig
+from typing import List
 
 import torch
 import torch.nn as nn
@@ -16,10 +19,12 @@ from mani_skill.utils.geometry.rotation_conversions import (
     matrix_to_quaternion, euler_angles_to_matrix
 )
 
+from odpc.data.obs_processors import BaseObsProcessor
 from odpc.data.data_conversion import DataConversion
 from odpc.models.odpc import ODPCModel
 from odpc.utils.math import pose_multiply, pose_inv
 from odpc.utils.visualize import visualize_pose
+from odpc.utils.utils import instantiate_from_config
 
 DT = 0.05
 DP_MAX = DT * 0.5
@@ -37,6 +42,7 @@ class ODPCAgent(nn.Module):
             control_mode: str = 'pd_ee_pose',
             robot_uid: str = 'panda',
             video_dir: str = None,
+            obs_processor_configs: ListConfig = [],
     ):
         super(ODPCAgent, self).__init__()
         self.model = model
@@ -45,6 +51,10 @@ class ODPCAgent(nn.Module):
         self.act_horizon = act_horizon
         self.control_mode = control_mode
         self.video_dir = video_dir
+
+        self.obs_processors: List[BaseObsProcessor] = []
+        for obs_processor_config in obs_processor_configs:
+            self.obs_processors.append(instantiate_from_config(obs_processor_config))
 
         self._video_writer = None
         if video_dir is not None:
@@ -139,15 +149,15 @@ class ODPCAgent(nn.Module):
         return action
 
 
-    def grasp(self, state_dict):
-        ee_pose = state_dict["extra"]["tcp_pose"][:, 0, :]
-        base_pose = state_dict["extra"]["base_pose"][:, 0, :]
+    def grasp(self, obs):
+        ee_pose = obs["extra"]["tcp_pose"][:, 0, :]
+        base_pose = obs["extra"]["base_pose"][:, 0, :]
         base_ee_pose = pose_multiply(pose_inv(base_pose), ee_pose)
 
         if self.stages[0] == 0:
             self.get_grasp_pose(
-                peg_half_size=state_dict['extra']['peg_half_size'][:, -1, :],
-                peg_pose=state_dict['extra']['peg_pose'][:, -1, :],
+                peg_half_size=obs['extra']['peg_half_size'][:, -1, :],
+                peg_pose=obs['extra']['peg_pose'][:, -1, :],
                 ee_pose=ee_pose,
                 base_pose=base_pose,
             )
@@ -193,21 +203,33 @@ class ODPCAgent(nn.Module):
             grid[x: x + h, y: y + w] = rgb
         return grid
 
-    def odpc_exec(self, obs_seq, state_dict):
-        ee_pose = state_dict["extra"]["tcp_pose"][:, 0, :]
-        base_pose = state_dict["extra"]["base_pose"][:, 0, :]
-        cam_obj_pose_cur = state_dict["extra"]["cam0_peg_pose"][..., :1, :]
+    @torch.no_grad()
+    def odpc_exec(self, obs):
+        ee_pose = obs["extra"]["tcp_pose"][:, 0, :]
+        base_pose = obs["extra"]["base_pose"][:, 0, :]
+        cam_obj_pose_cur = obs["extra"]["cam0_peg_pose"][..., :1, :]
 
         # Receding Horizon Control
         action_step = self.action_step % self.act_horizon
 
         if action_step == 0:
-            pred = self.model.get_action(obs_seq)
+            obs_processed = copy.deepcopy(obs)
+            for sensor_data in obs_processed["sensor_data"].values():
+                for modality in sensor_data:
+                    sensor_data[modality] = sensor_data[modality].permute(0, 1, 3, 4, 2) 
+            for processor in self.obs_processors:
+                obs_processed = processor.process(obs_processed)
+            for sensor_data in obs_processed["sensor_data"].values():
+                for modality in sensor_data:
+                    sensor_data[modality] = sensor_data[modality].permute(0, 1, 4, 2, 3) 
+
+            pred = self.model.get_action(obs_processed)
+
             self.odpc_target_pose = self.dc.pred_to_target_pose(
                 pred=pred.clone().detach(),
-                poses_ee_cur=state_dict["extra"]["tcp_pose"][..., :1, :],
-                poses_base=state_dict["extra"]["base_pose"][..., :1, :],
-                poses_camera_world=state_dict["extra"]["cam0_world_pose"][..., :1, :],
+                poses_ee_cur=obs["extra"]["tcp_pose"][..., :1, :],
+                poses_base=obs["extra"]["base_pose"][..., :1, :],
+                poses_camera_world=obs["extra"]["cam0_world_pose"][..., :1, :],
             )
             if self.video_dir is not None:
                 self.cam_obj_pose = self.dc.pred_to_cam_obj_pose(
@@ -218,7 +240,7 @@ class ODPCAgent(nn.Module):
         if self.video_dir is not None:
             cam_obj_pose = self.cam_obj_pose[..., action_step:, :]
             
-            rgb = obs_seq["rgb"][:, 0, :3, :, :].cpu().numpy()
+            rgb = obs["sensor_data"]["base_camera"]["rgb"][:, 0, :3, :, :].cpu().numpy()
             rgb = rgb.transpose(0, 2, 3, 1)
             
             h, w = rgb.shape[-3:-1]
@@ -244,17 +266,17 @@ class ODPCAgent(nn.Module):
 
         return self.odpc_target_pose[..., action_step, :]
 
-
+    @torch.no_grad()
     def get_action(self, obs, channel_last=False):
         if channel_last:
             # 将 rgb 的形状从 (..., H, W, 3) 转换为 (..., 3, H, W)
             for sensor_data in obs["sensor_data"].values():
-                sensor_data["rgb"] = sensor_data["rgb"].permute(0, 1, 4, 2, 3)
-                sensor_data["depth"] = sensor_data["depth"].permute(0, 1, 4, 2, 3)       
+                for modality in sensor_data:
+                    sensor_data[modality] = sensor_data[modality].permute(0, 1, 4, 2, 3) 
         
         # ee 在 base 坐标系下的 target 坐标
         mp_target_pose = self.grasp(obs)
-        odpc_target_pose = self.odpc_exec(obs["sensor_data"]["base_camera"], obs)
+        odpc_target_pose = self.odpc_exec(obs)
         cond = self.stages.to(odpc_target_pose.device) == 5
         target_pose = torch.where(cond[:, None], odpc_target_pose, mp_target_pose)
 

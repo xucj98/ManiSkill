@@ -67,32 +67,28 @@ def evaluate_on_dataset(
     for data in dataloader:
         data = common.to_tensor(data, device)
 
-        ground_truth = dc.raw_to_pred(
-            poses_obj=data['poses_peg'],
-            poses_camera_world=data['poses_cam0_world'],
-        )
-
+        ground_truth = data["actions"]
         observations = data["observations"]
         prediction = model.get_action(observations)
 
-        if video_dir is not None:
-            poses_cam_world_cur = data['poses_cam0_world'][..., :1, :]
-            poses_peg_cur = data['poses_peg'][..., :1, :]
-            poses_cam_obj_cur = pose_multiply(poses_cam_world_cur, poses_peg_cur)
-            images_pred = dc.pred_to_visualize(
-                rgb=data["observations"]["rgb"][..., :3, :, :],
-                pred=prediction,
-                poses_cam_obj_cur=poses_cam_obj_cur,
-            )[..., ::-1]
-            images_gt = dc.pred_to_visualize(
-                rgb=data["observations"]["rgb"][..., :3, :, :],
-                pred=ground_truth,
-                poses_cam_obj_cur=poses_cam_obj_cur,
-            )[..., ::-1]
-            for i, (img_pred, img_gt) in enumerate(zip(images_pred, images_gt)):
-                cv2.imwrite(f"{video_dir}/{i:04d}.jpg", np.hstack([img_pred, img_gt]))
-                cv2.imshow("pred-gt", np.hstack((img_pred, img_gt)))
-                cv2.waitKey(20)
+        # if video_dir is not None:
+        #     poses_cam_world_cur = data['poses_cam0_world'][..., :1, :]
+        #     poses_peg_cur = data['poses_peg'][..., :1, :]
+        #     poses_cam_obj_cur = pose_multiply(poses_cam_world_cur, poses_peg_cur)
+        #     images_pred = dc.pred_to_visualize(
+        #         rgb=data["observations"]["rgb"][..., :3, :, :],
+        #         pred=prediction,
+        #         poses_cam_obj_cur=poses_cam_obj_cur,
+        #     )[..., ::-1]
+        #     images_gt = dc.pred_to_visualize(
+        #         rgb=data["observations"]["rgb"][..., :3, :, :],
+        #         pred=ground_truth,
+        #         poses_cam_obj_cur=poses_cam_obj_cur,
+        #     )[..., ::-1]
+        #     for i, (img_pred, img_gt) in enumerate(zip(images_pred, images_gt)):
+        #         cv2.imwrite(f"{video_dir}/{i:04d}.jpg", np.hstack([img_pred, img_gt]))
+        #         cv2.imshow("pred-gt", np.hstack((img_pred, img_gt)))
+        #         cv2.waitKey(20)
         
         square_error += (prediction - ground_truth).pow(2).sum()
         n += ground_truth.numel()

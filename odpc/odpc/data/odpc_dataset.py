@@ -2,8 +2,12 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data.dataset import Dataset
+from typing import List
+from omegaconf import DictConfig
 
-
+from odpc.utils import utils
+from odpc.data.obs_processors.base_processor import BaseObsProcessor
+from odpc.data.act_processors.base_processor import BaseActProcessor
 class ODPCDataset(Dataset):
     def __init__(
             self,
@@ -13,10 +17,19 @@ class ODPCDataset(Dataset):
             slices_step=1,
             num_traj=None,
             clip_traj=False,
+            obs_processor_configs: List[DictConfig] = [],
+            act_processor_configs: List[DictConfig] = [],
     ):
         self.data_path = data_path
-
         self.obs_horizon, self.pred_horizon = obs_horizon, pred_horizon
+
+        self.obs_processors: List[BaseObsProcessor] = []
+        for obs_processor_config in obs_processor_configs:
+            self.obs_processors.append(utils.instantiate_from_config(obs_processor_config))
+
+        self.act_processors: List[BaseActProcessor] = []
+        for act_processor_config in act_processor_configs:
+            self.act_processors.append(utils.instantiate_from_config(act_processor_config))
 
         with h5py.File(self.data_path, "r") as file:
             keys = list(file.keys())
@@ -78,43 +91,31 @@ class ODPCDataset(Dataset):
         traj_key = self.traj_keys[traj_idx]
         L = self.traj_lens[traj_idx]
 
-        def get_slice_data(file):
+        def get_slice_data(file, slice):
             if isinstance(file, (h5py.File, h5py.Group)):
-                return {key: get_slice_data(file[key]) for key in file.keys()}
+                return {key: get_slice_data(file[key], slice) for key in file.keys()}
             elif isinstance(file, h5py.Dataset):
-                return file[start: start + self.obs_horizon]
+                return file[slice]
             else:
                 raise NotImplementedError(f"H5 file type {type(file)} not supported")
 
-        sensor_data = get_slice_data(self._h5_file[f"{traj_key}/obs/sensor_data"])
-        obs_seq = {
-            key: np.transpose(
-                np.concatenate([v[key] for v in sensor_data.values()], axis=-1), axes=(0, 3, 1, 2)
-            ) for key in ["rgb", "depth"]
-        }
+        obs = get_slice_data(self._h5_file[f"{traj_key}/obs"], slice(start, start + self.obs_horizon))
+        for obs_processor in self.obs_processors:
+            obs = obs_processor.process(obs)
 
-        poses_peg = self._h5_file[f'{traj_key}/obs/extra/peg_pose'][start: end + 1]
-        poses_ee = self._h5_file[f'{traj_key}/obs/extra/tcp_pose'][start: end + 1]
-        poses_base = self._h5_file[f'{traj_key}/obs/extra/base_pose'][start: end + 1]
-        poses_cam0_world = self._h5_file[f'{traj_key}/obs/extra/cam0_world_pose'][start: end + 1]
-        intrinsic = self._h5_file[f'{traj_key}/obs/sensor_param/base_camera/intrinsic_cv'][0]
-        act_seq = self._h5_file[f"{traj_key}/actions"][start: end]
-        if end > L:
-            poses_peg, poses_base, poses_ee, poses_cam0_world = [
-                np.concatenate([raw, raw[-1:].repeat(end - L, 0)], axis=0)
-                for raw in [poses_peg, poses_base, poses_ee, poses_cam0_world]
-            ]
+        act = get_slice_data(self._h5_file[f"{traj_key}/obs/extra"], slice(start, end + 1))
+        for key in act.keys():
+            act[key] = utils.expand_dim_to(act[key], 0, self.pred_horizon + 1)
+        for act_processor in self.act_processors:
+            act = act_processor.process(act)
 
-            act_seq = np.concatenate([act_seq, np.zeros_like(act_seq[-1:]).repeat(end - L, 0)], axis=0)
+        for sensor in obs["sensor_data"].values():
+            for modality, data in sensor.items():
+                sensor[modality] = np.transpose(data, (0, 3, 1, 2))
 
         return {
-            "observations": obs_seq,
-            "actions": act_seq,
-            "poses_peg": poses_peg,
-            "poses_ee": poses_ee,
-            "poses_base": poses_base,
-            "poses_cam0_world": poses_cam0_world,
-            "intrinsic": intrinsic,
+            "observations": obs,
+            "actions": act["actions"],
         }
 
     def __len__(self):

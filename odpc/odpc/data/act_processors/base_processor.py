@@ -4,16 +4,13 @@ from typing import Optional
 
 from mani_skill.utils import common
 
-class BaseObsProcessor:
-    def __init__(
-            self,
-            **kwargs,   
-    ):
+class BaseActProcessor:
+    def __init__(self):
         pass
 
-    def process(self, obs: dict) -> dict:
-        pass
-    
+    def process(self, act: dict) -> dict:
+        return act
+
     def to_tensor(self, obs: dict, device: Optional[torch.device] = None) -> dict:
         return common.to_tensor(obs, device)
     

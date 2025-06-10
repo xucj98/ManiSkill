@@ -19,6 +19,7 @@ from mani_skill.utils import common
 from diffusion_policy.utils import IterationBasedBatchSampler, worker_init_fn
 
 import odpc.envs
+from odpc.utils import utils
 from odpc.utils.utils import instantiate_from_config
 from odpc.data.data_conversion import DataConversion
 from odpc.models.odpc import ODPCModel
@@ -148,15 +149,10 @@ if __name__ == "__main__":
 
     for step, data_batch in enumerate(train_dataloader):
         data_batch = common.to_tensor(data_batch, device)
-
-        pred = data_conversion.raw_to_pred(
-            poses_obj=data_batch['poses_peg'],
-            poses_camera_world=data_batch['poses_cam0_world'],
-        )
-
+        
         total_loss = model.compute_loss(
             obs_seq=data_batch["observations"],
-            action_seq=pred,
+            action_seq=data_batch["actions"],
         )
 
         optimizer.zero_grad()

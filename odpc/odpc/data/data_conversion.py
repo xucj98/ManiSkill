@@ -11,6 +11,7 @@ from mani_skill.utils.geometry.rotation_conversions import (
     axis_angle_to_quaternion, quaternion_to_axis_angle,
 )
 
+from odpc.utils import utils
 from odpc.utils.math import pose_inv, pose_multiply
 from odpc.utils.visualize import visualize_pose
 
@@ -104,13 +105,6 @@ class DataConversion:
 
         return torch.cat((pos, rot), dim=-1)
 
-    @staticmethod
-    def expend_dim_to(a, dim, length):
-        if a.shape[dim] < length:
-            expand = torch.repeat_interleave(torch.narrow(a, dim, -1, 1), length - a.shape[dim], dim)
-            a = torch.cat((a, expand), dim=dim)
-        return a
-
     @torch.no_grad()
     def pred_to_target_pose(
             self,
@@ -134,14 +128,14 @@ class DataConversion:
             tensor of shape (..., T, 6) for "pd_ee_delta_pose", (..., T, 7) for "pd_ee_pose"
         """
         t = pred.shape[-2]
-        poses_base = self.expend_dim_to(poses_base, -2, t + 1)
+        poses_base = utils.expand_dim_to(poses_base, -2, t + 1)
 
         assert poses_camera is not None or poses_camera_world is not None
         if poses_camera is None:
-            poses_camera_world = self.expend_dim_to(poses_camera_world, -2, t + 1)
+            poses_camera_world = utils.expand_dim_to(poses_camera_world, -2, t + 1)
             poses_camera = pose_inv(poses_camera_world)
         if poses_camera_world is None:
-            poses_camera = self.expend_dim_to(poses_camera, -2, t + 1)
+            poses_camera = utils.expand_dim_to(poses_camera, -2, t + 1)
             poses_camera_world = pose_inv(poses_camera)
 
         pred = self.pred_to_quaternion(pred)
@@ -188,6 +182,7 @@ class DataConversion:
             poses_frame_obj_cur: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
+        !!!deprecated!!!
         Args:
             pred: nn prediction, tensor of shape (..., T, D)
             poses_ee_cur: ee in world, tensor of shape (..., 1, 7)
@@ -263,6 +258,7 @@ class DataConversion:
             poses_cam_obj_cur: Optional[torch.Tensor] = None,
     ) -> np.ndarray:
         """
+        !!!deprecated!!!
         Args:
             rgb: RGB image, tensor of shape (..., 1, C, H, W)
             pred: nn prediction, tensor of shape (..., T, D)

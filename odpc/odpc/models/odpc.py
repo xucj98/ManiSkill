@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from odpc.utils.utils import instantiate_from_config
+from odpc.models.vision import BaseVisionEncoder
 
 class ODPCModel(nn.Module):
     def __init__(
@@ -17,13 +19,13 @@ class ODPCModel(nn.Module):
         self.obs_horizon = obs_horizon
         self.pred_horizon = pred_horizon
         self.output_dim = output_dim
-        self.visual_encoder = instantiate_from_config(visual_encoder_config)
+        self.visual_encoder: BaseVisionEncoder = instantiate_from_config(visual_encoder_config)
         self.noise_pred_net = instantiate_from_config(noise_pred_net_config)
         self.noise_scheduler = instantiate_from_config(noise_scheduler_config)
 
     def compute_loss(self, obs_seq, action_seq):
-        B = obs_seq["rgb"].shape[0]
-        device = obs_seq["rgb"].device
+        B = action_seq.shape[0]
+        device = action_seq.device
 
         # observation as FiLM conditioning
         obs_cond = self.visual_encoder(obs_seq)  # (B, obs_horizon * obs_dim)
@@ -55,13 +57,12 @@ class ODPCModel(nn.Module):
         # if we use DDPM, and inference_diffusion_steps == train_diffusion_steps, then we can skip this
 
         # obs_seq['state']: (B, obs_horizon, obs_state_dim)
-        B = obs_seq["rgb"].shape[0]
         with torch.no_grad():
             obs_cond = self.visual_encoder(obs_seq)  # (B, obs_horizon * obs_dim)
 
             # initialize action from Guassian noise
             noisy_action_seq = torch.randn(
-                (B, self.pred_horizon, self.output_dim), device=obs_seq["rgb"].device
+                (obs_cond.shape[0], self.pred_horizon, self.output_dim), device=obs_cond.device
             )
 
             for k in self.noise_scheduler.timesteps:
