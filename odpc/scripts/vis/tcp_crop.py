@@ -5,7 +5,8 @@ import numpy as np
 import h5py
 import cv2
 
-from odpc.data.processors.obs_processor import ObsPreprocessor
+from odpc.data.obs_processors.tcp_crop import TcpCropProcessor
+from odpc.utils import utils
 
 
 def get_args():
@@ -18,10 +19,32 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
 
-    processor = ObsPreprocessor(
+    obs_meta = {
+        "sensor_data": {
+            "base_camera": {
+                "rgb": {"shape": ("t", 256, 256, 3), "dtype": "uint8"},
+                "depth": {"shape": ("t", 256, 256, 1), "dtype": "int16"},
+                "segmentation": {"shape": ("t", 256, 256, 1), "dtype": "int32"},
+            }
+        },
+        "sensor_param": {
+            "base_camera": {
+                "intrinsic_cv": {"shape": ("t", 3, 3), "dtype": "float32"},
+            }
+        },
+        "extra": {
+            "tcp_pose": {"shape": ("t", 7), "dtype": "float32"},
+            "cam0_world_pose": {"shape": ("t", 7), "dtype": "float32"},
+        }
+    }
+
+
+    processor = TcpCropProcessor(
+        obs_meta=obs_meta,
         crop_size=(128, 128),
         padding_value=0,
         camera_name="base_camera",
+        output_postfix="_crop",
     )
 
     with h5py.File(args.traj_path, 'r') as file:

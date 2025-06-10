@@ -16,13 +16,23 @@ def instantiate_from_config(config: DictConfig, **override_kwargs):
 
     return getattr(importlib.import_module(module), cls)(**params)
 
-def get_data_shape(data):
+def get_data_shape(data, min_max=True, dtype=True):
     if isinstance(data, torch.Tensor):
-        return data.shape, f"{torch.min(data).item():.4f}, {torch.max(data).item():.4f}"
+        res = (data.shape, )
+        if dtype:
+            res += (data.dtype, )
+        if min_max:
+            res += (f"{torch.min(data).item():.4f}, {torch.max(data).item():.4f}", )
+        return res
     if isinstance(data, (np.ndarray, h5py.Dataset)):
-        return data.shape, f"{np.min(data).item():.4f}, {np.max(data).item():.4f}"
+        res = (data.shape, )
+        if dtype:
+            res += (data.dtype, )
+        if min_max:
+            res += (f"{np.min(data).item():.4f}, {np.max(data).item():.4f}", )
+        return res
     shape = {}
     if isinstance(data, (dict, h5py.Group)):
         for k, v in data.items():
-            shape[k] = get_data_shape(v)
+            shape[k] = get_data_shape(v, min_max, dtype)
     return shape
