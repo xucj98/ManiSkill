@@ -23,6 +23,8 @@ trainer:
   eval_freq: 40000
   log_freq: 1000
   num_dataload_workers: 8
+  use_amp: true
+  amp_dtype: "float16"
 
 obs_processor_configs:
   - _target_: odpc.data.obs_processors.ClampDepthProcessor
