@@ -5,7 +5,7 @@ act_horizon: 8
 pred_horizon: 16
 
 torch_deterministic: true
-track: false
+track: true
 wandb_project_name: "ManiSkill"
 wandb_entity: null
 
