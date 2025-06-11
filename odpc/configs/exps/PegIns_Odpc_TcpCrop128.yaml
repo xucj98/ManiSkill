@@ -1,4 +1,4 @@
-exp_name: "PegIns_Odpc"
+exp_name: "PegIns_Odpc_TcpCrop128"
 seed: 42
 obs_horizon: 1
 act_horizon: 8
@@ -29,6 +29,11 @@ obs_processor_configs:
     depth_threshold: 3000
     clamp_to_zero: true
   - _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
+  - _target_: odpc.data.obs_processors.TcpCropProcessor
+    crop_size: [128, 128]
+    padding_value: 0
+    camera_name: base_camera
+    output_postfix: _crop
 
 dc_config:
   _target_: odpc.data.data_conversion.DataConversion
@@ -66,10 +71,16 @@ model:
         depth: sensor_data.base_camera.depth
         shape: [1, 4, 256, 256]
         output_dim: 256
+      base_camera_crop:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb_crop
+        depth: sensor_data.base_camera.depth_crop
+        shape: [1, 4, 128, 128]
+        output_dim: 256
   noise_pred_net_config:
     _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
     input_dim: ${model.output_dim}
-    global_cond_dim: 256
+    global_cond_dim: 512
     diffusion_step_embed_dim: 64
     down_dims: [64, 128, 256]
     n_groups: 8
