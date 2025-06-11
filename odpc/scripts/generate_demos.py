@@ -29,16 +29,21 @@ if __name__ == "__main__":
     
     # todo: 支持 xarm6, 
     cfg.motion_planning_args.record_dir = args.record_dir
-    motion_planning(cfg.motion_planning_args)
-    traj_path = os.path.join(args.record_dir, f"{cfg.traj_name}.h5")
+    traj_path = motion_planning(cfg.motion_planning_args)
     
     if cfg.control_mode != cfg.motion_planning_args.env_kwargs.control_mode:
-        cfg.control_mode = cfg.motion_planning_args.env_kwargs.control_mode
-        #todo: 转换控制模式
+        replay_trajectory_args = ReplayTrajectoryArgs(
+            traj_path=traj_path,
+            obs_mode=None,
+            target_control_mode=cfg.control_mode,
+            save_traj=True,
+            allow_failure=not cfg.only_count_success,
+            num_envs=cfg.num_procs,
+        )
+        traj_path = replay_trajectory(replay_trajectory_args)
 
-    clip_demo(traj_path)
+    traj_path = clip_demo(traj_path)
 
-    traj_path = traj_path.replace('.h5', f'_clip.h5')
     replay_trajectory_args = ReplayTrajectoryArgs(
         traj_path=traj_path,
         obs_mode=cfg.obs_mode,
@@ -48,4 +53,6 @@ if __name__ == "__main__":
         num_envs=cfg.num_procs,
         use_env_states=True,
     )
-    replay_trajectory(replay_trajectory_args)
+    traj_path = replay_trajectory(replay_trajectory_args)
+
+    print(f"Generate {traj_path} successfully")

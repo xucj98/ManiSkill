@@ -43,32 +43,35 @@ def main(
     with open(traj_path.replace('.h5', '.json'), 'r') as f:
         traj_info = json.load(f)
         
-        episode_infos = {}
-        for episode_info in traj_info['episodes']:
-            episode_infos[episode_info['episode_id']] = episode_info
+    episode_infos = {}
+    for episode_info in traj_info['episodes']:
+        episode_infos[episode_info['episode_id']] = episode_info
 
-        if os.path.exists(traj_path.replace('.h5', f'_clip.h5')):
-            os.remove(traj_path.replace('.h5', f'_clip.h5'))
+    name, ext = traj_path.split('.', 1)
+    dst_path = name + "_clip." + ext
+    if os.path.exists(dst_path):
+        os.remove(dst_path)
 
-        src_file = h5py.File(traj_path, 'r')
-        dst_file = h5py.File(traj_path.replace('.h5', f'_clip.h5'), 'w')
+    src_file = h5py.File(traj_path, 'r')
+    dst_file = h5py.File(dst_path, 'w')
 
-        traj_keys = list(src_file.keys())
-        for traj_key in traj_keys:
-            traj = src_file[traj_key]
-            episode_id = int(traj_key.split('_')[-1])
-            start = episode_infos[episode_id]['start_step']
-            traj_clip = clip_traj(traj, start)
-            save_h5(traj_clip, dst_file, traj_key)
-            episode_infos[episode_id]['elapsed_steps'] -= start
-            episode_infos[episode_id]['start_step'] = 0
-        
-        with open(traj_path.replace('.h5', f'_clip.json'), 'w') as f:
-            json.dump(traj_info, f, indent=2)
-
-        src_file.close()
-        dst_file.close()
+    traj_keys = list(src_file.keys())
+    for traj_key in traj_keys:
+        traj = src_file[traj_key]
+        episode_id = int(traj_key.split('_')[-1])
+        start = episode_infos[episode_id]['start_step']
+        traj_clip = clip_traj(traj, start)
+        save_h5(traj_clip, dst_file, traj_key)
+        episode_infos[episode_id]['elapsed_steps'] -= start
+        episode_infos[episode_id]['start_step'] = 0
     
+    with open(dst_path.replace('.h5', f'.json'), 'w') as f:
+        json.dump(traj_info, f, indent=2)
+
+    src_file.close()
+    dst_file.close()
+    
+    return dst_path
 
 if __name__ == "__main__":
     args = get_args()

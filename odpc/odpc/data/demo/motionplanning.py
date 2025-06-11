@@ -146,4 +146,6 @@ def main(args):
             tqdm.write(f"Remove {json_path}")
             os.remove(json_path)
     else:
-        _main(args)
+        output_path = _main(args)
+
+    return output_path

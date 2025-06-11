@@ -238,6 +238,12 @@ def replay_parallelized_sim(
                         env.flush_trajectory(
                             env_idxs_to_flush=np.where(envs_to_flush)[0]
                         )
+                        # 保存 start_step 信息
+                        for i, episode in enumerate(episode_batch):
+                            if envs_to_flush[i] and "start_step" in episode:
+                                env._json_data["episodes"][-1]["start_step"] = episode["start_step"]
+                                from mani_skill.utils.io_utils import dump_json
+                                dump_json(env._json_path, env._json_data, indent=2)
         else:
             raise NotImplementedError(
                 "Replay with different control modes are not supported when replaying on GPU parallelized environments"
@@ -361,6 +367,12 @@ def replay_cpu_sim(
                 successful_replays += 1
                 if args.save_traj:
                     env.flush_trajectory()
+                    # 保存 start_step 信息
+                    if "start_step" in episode:
+                        env._json_data["episodes"][-1]["start_step"] = episode["start_step"]
+                        # 立即写回json文件，防止丢失
+                        from mani_skill.utils.io_utils import dump_json
+                        dump_json(env._json_path, env._json_data, indent=2)
                 if args.save_video:
                     env.flush_video(ignore_empty_transition=False)
                 break
@@ -546,7 +558,7 @@ def main(args: Args):
     env_kwargs["num_envs"] = args.num_envs
     if env_kwargs["sim_backend"] not in CPU_SIM_BACKENDS:
         record_episode_kwargs["max_steps_per_video"] = env_info["max_episode_steps"]
-        _, replay_result = _main(
+        output_path, replay_result = _main(
             args,
             use_cpu_backend=False,
             env_id=env_id,
@@ -614,6 +626,7 @@ def main(args: Args):
         f"{replay_result.successful_replays}/{replay_result.num_replays}={replay_result.successful_replays/replay_result.num_replays*100:.2f}% demos saved"
     )
 
+    return output_path
 
 if __name__ == "__main__":
     # spawn is needed due to warp init issue
