@@ -22,7 +22,7 @@ import odpc.envs
 from odpc.utils import utils
 from odpc.utils.utils import instantiate_from_config
 from odpc.data.data_conversion import DataConversion
-from odpc.models.odpc import ODPCModel
+from odpc.models.policy import BasePolicy
 from odpc.evaluation.evaluate import Evaluator
 
 
@@ -130,19 +130,17 @@ if __name__ == "__main__":
         persistent_workers=(cfg.trainer.num_dataload_workers > 0),
     )
 
-    data_conversion: DataConversion = instantiate_from_config(cfg.data_conversion)
-
-    model: ODPCModel = instantiate_from_config(cfg.model).to(device)
+    model: BasePolicy = instantiate_from_config(cfg.model).to(device)
     
     optimizer = instantiate_from_config(cfg.optimizer, params=model.parameters())
     lr_scheduler = instantiate_from_config(cfg.lr_scheduler, optimizer=optimizer)
     
     ema = EMAModel(parameters=model.parameters(), power=0.75)  
-    ema_model: ODPCModel = instantiate_from_config(cfg.model).to(device)
+    ema_model: BasePolicy = instantiate_from_config(cfg.model).to(device)
     ema_model.eval()
 
     # 创建evaluator
-    evaluator: Evaluator = instantiate_from_config(cfg.evaluator, model=ema_model, dc=data_conversion)
+    evaluator: Evaluator = instantiate_from_config(cfg.evaluator, model=ema_model)
 
     model.train()
     pbar = tqdm(total=cfg.trainer.total_iters)
@@ -151,8 +149,8 @@ if __name__ == "__main__":
         data_batch = common.to_tensor(data_batch, device)
         
         total_loss = model.compute_loss(
-            obs_seq=data_batch["observations"],
-            action_seq=data_batch["actions"],
+            obs=data_batch["observations"],
+            action=data_batch["actions"],
         )
 
         optimizer.zero_grad()

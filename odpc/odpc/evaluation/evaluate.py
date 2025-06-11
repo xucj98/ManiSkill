@@ -11,14 +11,14 @@ import gymnasium as gym
 from mani_skill.utils import common
 
 from odpc.data.data_conversion import pose_multiply, DataConversion
-from odpc.models.agent import ODPCAgent
-from odpc.models.odpc import ODPCModel
+from odpc.models.agent import BaseAgent
+from odpc.models.policy import BasePolicy
 from odpc.utils.utils import instantiate_from_config
 
 
 
 def evaluate_on_env(
-        n: int, agent: ODPCAgent, eval_envs, device, sim_backend: str, progress_bar: bool = True
+        n: int, agent: BaseAgent, eval_envs, device, sim_backend: str, progress_bar: bool = True
 )-> Dict[str, np.ndarray]:
     if progress_bar:
         pbar = tqdm(total=n)
@@ -57,7 +57,7 @@ def evaluate_on_env(
     return eval_metrics
 
 def evaluate_on_dataset(
-        model: ODPCModel, dataset, dc, batch_size, device, video_dir=None
+        model: BasePolicy, dataset, batch_size, device, video_dir=None
 )-> Dict[str, np.ndarray]:
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False)
 
@@ -101,9 +101,8 @@ def evaluate_on_dataset(
 
 
 class Evaluator:
-    def __init__(self, model: ODPCModel, dc: DataConversion, env_configs: DictConfig, dataset_configs: DictConfig):
+    def __init__(self, model: BasePolicy, env_configs: DictConfig, dataset_configs: DictConfig):
         self.model = model
-        self.dc = dc
         self.env_configs = env_configs
         self.dataset_configs = dataset_configs
         self.device = next(model.parameters()).device
@@ -138,10 +137,9 @@ class Evaluator:
                     video_dir=env_config.env.video_dir,
                 )
           
-                agent: ODPCAgent = instantiate_from_config(
+                agent: BaseAgent = instantiate_from_config(
                     env_config.agent,
                     model=self.model,
-                    dc=self.dc,
                     video_dir=env_config.agent.video_dir,
                 ).eval().to(self.device)
 
@@ -160,7 +158,6 @@ class Evaluator:
                 dataset_metrics = evaluate_on_dataset(
                     self.model, 
                     self.datasets[dataset_name], 
-                    self.dc, 
                     batch_size, 
                     self.device,
                 )

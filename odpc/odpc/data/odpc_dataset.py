@@ -16,7 +16,6 @@ class ODPCDataset(Dataset):
             pred_horizon,
             slices_step=1,
             num_traj=None,
-            clip_traj=False,
             obs_processor_configs: List[DictConfig] = [],
             act_processor_configs: List[DictConfig] = [],
     ):
@@ -50,17 +49,6 @@ class ODPCDataset(Dataset):
                 self.traj_lens.append(traj_len)
                 total_transitions += traj_len
 
-                # poses_cam0_peg = file[f'{traj_key}/obs/extra/cam0_peg_pose']
-                poses_world_peg = file[f'{traj_key}/obs/extra/peg_pose']
-                # cam0_extrinsic = file[f'{traj_key}/obs/sensor_param/base_camera/extrinsic_cv']
-
-                if clip_traj:
-                    peg_z = poses_world_peg[:-1, 2]
-                    peg_z = peg_z - np.min(peg_z)
-                    traj_start = np.where(peg_z > 1e-3)[0][0]
-                else:
-                    traj_start = 0
-
                 # |o|o|                             observations: 2
                 # | |a|a|a|a|a|a|a|a|               actions executed: 8
                 # |p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
@@ -69,7 +57,7 @@ class ODPCDataset(Dataset):
                 # Note that in the original code, pad_after = act_horizon - 1, but I think this is not the best choice
                 self.slices += [
                     (traj_idx, start, start + pred_horizon)
-                    for start in range(traj_start, traj_len - pred_horizon + pad_after, slices_step)
+                    for start in range(0, traj_len - pred_horizon + pad_after, slices_step)
                 ]  # slice indices follow convention [start, end)
 
                 pbar.update(1)
@@ -106,6 +94,8 @@ class ODPCDataset(Dataset):
         act = get_slice_data(self._h5_file[f"{traj_key}/obs/extra"], slice(start, end + 1))
         for key in act.keys():
             act[key] = utils.expand_dim_to(act[key], 0, self.pred_horizon + 1)
+        act["actions"] = get_slice_data(self._h5_file[f"{traj_key}/actions"], slice(start, end))
+        act["actions"] = utils.expand_dim_to(act["actions"], 0, self.pred_horizon)
         for act_processor in self.act_processors:
             act = act_processor.process(act)
 

@@ -4,8 +4,9 @@ import torch.nn.functional as F
 
 from odpc.utils.utils import instantiate_from_config
 from odpc.models.vision import BaseVisionEncoder
+from odpc.models.policy.base_policy import BasePolicy
 
-class ODPCModel(nn.Module):
+class DiffusionUnetImagePolicy(BasePolicy):
     def __init__(
             self, 
             obs_horizon,
@@ -15,20 +16,25 @@ class ODPCModel(nn.Module):
             noise_pred_net_config,
             noise_scheduler_config,
     ):
-        super().__init__()
-        self.obs_horizon = obs_horizon
-        self.pred_horizon = pred_horizon
-        self.output_dim = output_dim
+        super().__init__(
+            obs_horizon=obs_horizon,
+            pred_horizon=pred_horizon,
+            output_dim=output_dim,
+        )
         self.visual_encoder: BaseVisionEncoder = instantiate_from_config(visual_encoder_config)
         self.noise_pred_net = instantiate_from_config(noise_pred_net_config)
         self.noise_scheduler = instantiate_from_config(noise_scheduler_config)
 
-    def compute_loss(self, obs_seq, action_seq):
-        B = action_seq.shape[0]
-        device = action_seq.device
+    def compute_loss(
+            self, 
+            obs: dict, 
+            action: torch.Tensor,
+    ) -> torch.Tensor:
+        B = action.shape[0]
+        device = action.device
 
         # observation as FiLM conditioning
-        obs_cond = self.visual_encoder(obs_seq)  # (B, obs_horizon * obs_dim)
+        obs_cond = self.visual_encoder(obs)  # (B, obs_horizon * obs_dim)
 
         # sample noise to add to actions
         noise = torch.randn((B, self.pred_horizon, self.output_dim), device=device)
@@ -40,16 +46,21 @@ class ODPCModel(nn.Module):
 
         # add noise to the clean images(actions) according to the noise magnitude at each diffusion iteration
         # (this is the forward diffusion process)
-        noisy_action_seq = self.noise_scheduler.add_noise(action_seq, noise, timesteps)
+        noisy_action_seq = self.noise_scheduler.add_noise(action, noise, timesteps)
 
         # predict the noise residual
         noise_pred = self.noise_pred_net(
-            noisy_action_seq, timesteps, global_cond=obs_cond
+            sample=noisy_action_seq,
+            timestep=timesteps,
+            global_cond=obs_cond,
         )
 
         return F.mse_loss(noise_pred, noise)
 
-    def get_action(self, obs_seq):
+    def get_action(
+            self, 
+            obs: dict,
+    ) -> torch.Tensor:
         # init scheduler
         # self.noise_scheduler.set_timesteps(self.num_diffusion_iters)
         # set_timesteps will change noise_scheduler.timesteps is only used in noise_scheduler.step()
@@ -58,7 +69,7 @@ class ODPCModel(nn.Module):
 
         # obs_seq['state']: (B, obs_horizon, obs_state_dim)
         with torch.no_grad():
-            obs_cond = self.visual_encoder(obs_seq)  # (B, obs_horizon * obs_dim)
+            obs_cond = self.visual_encoder(obs)  # (B, obs_horizon * obs_dim)
 
             # initialize action from Guassian noise
             noisy_action_seq = torch.randn(

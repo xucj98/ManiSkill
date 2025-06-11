@@ -42,7 +42,8 @@ if __name__ == "__main__":
         )
         traj_path = replay_trajectory(replay_trajectory_args)
 
-    traj_path = clip_demo(traj_path)
+    if cfg.clip:
+        traj_path = clip_demo(traj_path)
 
     replay_trajectory_args = ReplayTrajectoryArgs(
         traj_path=traj_path,

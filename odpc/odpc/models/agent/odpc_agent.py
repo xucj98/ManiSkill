@@ -19,11 +19,11 @@ from mani_skill.utils.geometry.rotation_conversions import (
     matrix_to_quaternion, euler_angles_to_matrix
 )
 
-from odpc.data.obs_processors import BaseObsProcessor
 from odpc.data.data_conversion import DataConversion
-from odpc.models.odpc import ODPCModel
+from odpc.models.policy.base_policy import BasePolicy
 from odpc.utils.math import pose_multiply, pose_inv
 from odpc.utils.visualize import visualize_pose
+from odpc.models.agent.base_agent import BaseAgent
 from odpc.utils.utils import instantiate_from_config
 
 DT = 0.05
@@ -31,38 +31,37 @@ DP_MAX = DT * 0.5
 DQ_MAX = DT * 1.0
 
 
-class ODPCAgent(nn.Module):
+class ODPCAgent(BaseAgent):
     def __init__(
             self,
-            model: ODPCModel,
-            dc: DataConversion,
+            model: BasePolicy,
             num_envs: int,
             act_horizon: int,
             pred_horizon: int,
             control_mode: str = 'pd_ee_pose',
             robot_uid: str = 'panda',
             video_dir: str = None,
+            dc_configs: DictConfig = {},
             obs_processor_configs: ListConfig = [],
     ):
-        super(ODPCAgent, self).__init__()
-        self.model = model
-        self.dc = dc
-        self.num_envs = num_envs
-        self.act_horizon = act_horizon
+        super().__init__(
+            model=model,
+            num_envs=num_envs,
+            act_horizon=act_horizon,
+            pred_horizon=pred_horizon,
+            video_dir=video_dir,
+            obs_processor_configs=obs_processor_configs,
+        )
+        self.dc: DataConversion = instantiate_from_config(dc_configs)
         self.control_mode = control_mode
         self.video_dir = video_dir
-
-        self.obs_processors: List[BaseObsProcessor] = []
-        for obs_processor_config in obs_processor_configs:
-            self.obs_processors.append(instantiate_from_config(obs_processor_config))
 
         self._video_writer = None
         if video_dir is not None:
             os.makedirs(video_dir, exist_ok=True)
             
         self.stages = torch.zeros(num_envs)
-        self.action_step = 0
-        self.model_action = torch.zeros((num_envs, pred_horizon, dc.control_dim))
+        self.model_action = torch.zeros((num_envs, pred_horizon, self.dc.control_dim))
 
         self.base_grasp_pose = torch.zeros((num_envs, 7))
         self.base_reach_pose = torch.zeros((num_envs, 7))
@@ -210,18 +209,14 @@ class ODPCAgent(nn.Module):
         cam_obj_pose_cur = obs["extra"]["cam0_peg_pose"][..., :1, :]
 
         # Receding Horizon Control
-        action_step = self.action_step % self.act_horizon
+        action_step = self._action_step % self.act_horizon
 
         if action_step == 0:
             obs_processed = copy.deepcopy(obs)
-            for sensor_data in obs_processed["sensor_data"].values():
-                for modality in sensor_data:
-                    sensor_data[modality] = sensor_data[modality].permute(0, 1, 3, 4, 2) 
+            obs_processed = self.permute_obs(obs_processed, [0, 1, 3, 4, 2])
             for processor in self.obs_processors:
                 obs_processed = processor.process(obs_processed)
-            for sensor_data in obs_processed["sensor_data"].values():
-                for modality in sensor_data:
-                    sensor_data[modality] = sensor_data[modality].permute(0, 1, 4, 2, 3) 
+            obs_processed = self.permute_obs(obs_processed, [0, 1, 4, 2, 3])
 
             pred = self.model.get_action(obs_processed)
 
@@ -269,10 +264,7 @@ class ODPCAgent(nn.Module):
     @torch.no_grad()
     def get_action(self, obs, channel_last=False):
         if channel_last:
-            # 将 rgb 的形状从 (..., H, W, 3) 转换为 (..., 3, H, W)
-            for sensor_data in obs["sensor_data"].values():
-                for modality in sensor_data:
-                    sensor_data[modality] = sensor_data[modality].permute(0, 1, 4, 2, 3) 
+            obs = self.permute_obs(obs, [0, 1, 4, 2, 3])
         
         # ee 在 base 坐标系下的 target 坐标
         mp_target_pose = self.grasp(obs)
@@ -291,13 +283,13 @@ class ODPCAgent(nn.Module):
         gripper = self.gripper_state[(self.stages >= 3).int()].to(action)
         action = torch.cat([action, gripper[:, None]], dim=-1)
 
-        self.action_step += 1
+        self._action_step += 1
 
         return action[:, None, :]
 
     def reset(self, obs=None, channel_last=False):
         self.stages[:] = 0
-        self.action_step = 0
+        self._action_step = 0
 
         if self._video_writer is not None:
             self._video_writer.release()
