@@ -11,6 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data.sampler import RandomSampler, BatchSampler
+from torch.cuda.amp import autocast, GradScaler
 
 from diffusers.training_utils import EMAModel
 
@@ -142,20 +143,36 @@ if __name__ == "__main__":
     # 创建evaluator
     evaluator: Evaluator = instantiate_from_config(cfg.evaluator, model=ema_model)
 
+    # 初始化混合精度训练
+    scaler = GradScaler() if cfg.trainer.use_amp else None
+    amp_dtype = getattr(torch, cfg.trainer.amp_dtype) if cfg.trainer.use_amp else torch.float32
+
     model.train()
     pbar = tqdm(total=cfg.trainer.total_iters)
 
     for step, data_batch in enumerate(train_dataloader):
         data_batch = common.to_tensor(data_batch, device)
         
-        total_loss = model.compute_loss(
-            obs=data_batch["observations"],
-            action=data_batch["actions"],
-        )
-
         optimizer.zero_grad()
-        total_loss.backward()
-        optimizer.step()
+        
+        # 使用混合精度训练
+        if cfg.trainer.use_amp:
+            with autocast(dtype=amp_dtype):
+                total_loss = model.compute_loss(
+                    obs=data_batch["observations"],
+                    action=data_batch["actions"],
+                )
+            scaler.scale(total_loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            total_loss = model.compute_loss(
+                obs=data_batch["observations"],
+                action=data_batch["actions"],
+            )
+            total_loss.backward()
+            optimizer.step()
+            
         lr_scheduler.step()
 
         ema.step(model.parameters())
