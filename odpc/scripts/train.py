@@ -96,7 +96,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = cfg.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    save_dir = f"runs/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    save_dir = f"runs/{cfg.wandb_group}/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     cfg.save_dir = save_dir
     print(f"save_dir: {os.path.abspath(save_dir)}")
 
