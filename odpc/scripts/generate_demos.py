@@ -27,10 +27,13 @@ if __name__ == "__main__":
     args, cfg = get_args()
     mp.set_start_method("spawn")
     
+    traj_paths = []
+
     # todo: 支持 xarm6, 
     cfg.motion_planning_args.record_dir = args.record_dir
     traj_path = motion_planning(cfg.motion_planning_args)
-    
+    traj_paths.append(traj_path)
+
     if cfg.control_mode != cfg.motion_planning_args.env_kwargs.control_mode:
         replay_trajectory_args = ReplayTrajectoryArgs(
             traj_path=traj_path,
@@ -41,9 +44,11 @@ if __name__ == "__main__":
             num_envs=cfg.num_procs,
         )
         traj_path = replay_trajectory(replay_trajectory_args)
+        traj_paths.append(traj_path)
 
     if cfg.clip:
         traj_path = clip_demo(traj_path)
+        traj_paths.append(traj_path)
 
     replay_trajectory_args = ReplayTrajectoryArgs(
         traj_path=traj_path,
@@ -55,5 +60,9 @@ if __name__ == "__main__":
         use_env_states=True,
     )
     traj_path = replay_trajectory(replay_trajectory_args)
+    
+    for traj_path in traj_paths:
+        os.remove(traj_path)
+        os.remove(traj_path.replace(".h5", ".json"))
 
     print(f"Generate {traj_path} successfully")
