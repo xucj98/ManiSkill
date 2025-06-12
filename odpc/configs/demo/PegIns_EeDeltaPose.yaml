@@ -1,9 +1,9 @@
 env_id: "PegInsertionSide-v2"
 obs_mode: "rgb+depth"
 control_mode: "pd_ee_delta_pose"
-num_traj: 1000
+num_traj: 2000
 only_count_success: true
-traj_name: "PegIns_EeDeltaPose"
+traj_name: "PegIns_EeDeltaPose_Demo2k"
 num_procs: 20
 shader: "default"
 clip: false

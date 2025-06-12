@@ -1,9 +1,9 @@
 env_id: "PegInsertionSide-v2"
 obs_mode: "state_dict+rgb+depth+segmentation"
 control_mode: "pd_ee_pose"
-num_traj: 1000
+num_traj: 2000
 only_count_success: true
-traj_name: "PegIns_Odpc"
+traj_name: "PegIns_Odpc_Demo2k"
 num_procs: 20
 shader: "default"
 clip: true
@@ -30,5 +30,5 @@ motion_planning_args:
   traj_name: ${traj_name}
   num_procs: ${num_procs}
   solve_kwargs:
-    pre_insert_aug: 0.5
+    pre_insert_aug: 0
     start_after_grasp: true

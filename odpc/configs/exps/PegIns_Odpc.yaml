@@ -48,7 +48,7 @@ act_processor_configs:
 
 train_dataset:
   _target_: odpc.data.odpc_dataset.ODPCDataset
-  data_path: demos/PegIns_Odpc_clip.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
+  data_path: demos/PegIns_Odpc_Demo2k_clip.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
   obs_horizon: ${obs_horizon}
   pred_horizon: ${pred_horizon}
   num_traj: 1000
@@ -124,7 +124,7 @@ evaluator:
   dataset_configs:
     ind:
       _target_: odpc.data.odpc_dataset.ODPCDataset
-      data_path: demos/PegIns_Odpc_clip.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
+      data_path: demos/PegIns_Odpc_Val200_clip.state_dict+rgb+depth+segmentation.pd_ee_pose.physx_cpu.h5
       obs_horizon: ${obs_horizon}
       pred_horizon: ${pred_horizon}
       num_traj: 100

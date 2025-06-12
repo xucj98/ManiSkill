@@ -60,9 +60,10 @@ if __name__ == "__main__":
         use_env_states=True,
     )
     traj_path = replay_trajectory(replay_trajectory_args)
-    
-    for traj_path in traj_paths:
-        os.remove(traj_path)
-        os.remove(traj_path.replace(".h5", ".json"))
+    OmegaConf.save(cfg, traj_path.replace(".h5", ".yaml"), resolve=True)
+
+    for path in traj_paths:
+        os.remove(path)
+        os.remove(path.replace(".h5", ".json"))
 
     print(f"Generate {traj_path} successfully")

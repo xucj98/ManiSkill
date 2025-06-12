@@ -37,6 +37,9 @@ def get_args():
     cli = OmegaConf.from_dotlist(unknown)
     cfg = OmegaConf.merge(cfg, cli)
 
+    cfg.demo_config = OmegaConf.load(cfg.train_dataset.data_path.replace(".h5", ".yaml"))
+    cfg.save_dir = f"runs/{cfg.wandb_group}/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
     return args, cfg
 
 
@@ -47,7 +50,7 @@ def copy_ema_buffers():
 
 def save_ckpt():
     if step % cfg.trainer.save_freq == 0:
-        os.makedirs(f"{save_dir}/checkpoints", exist_ok=True)
+        os.makedirs(f"{cfg.save_dir}/checkpoints", exist_ok=True)
         ema.copy_to(ema_model.parameters())
         copy_ema_buffers()
         torch.save(
@@ -55,7 +58,7 @@ def save_ckpt():
                 "model": model.state_dict(),
                 "ema_model": ema_model.state_dict(),
             },
-            f"{save_dir}/checkpoints/{step}.pt",
+            f"{cfg.save_dir}/checkpoints/{step}.pt",
         )
 
 
@@ -96,12 +99,10 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = cfg.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    save_dir = f"runs/{cfg.wandb_group}/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    cfg.save_dir = save_dir
-    print(f"save_dir: {os.path.abspath(save_dir)}")
 
-    os.makedirs(save_dir)    
-    OmegaConf.save(cfg, f"{save_dir}/config.yaml", resolve=True)
+    os.makedirs(cfg.save_dir)    
+    OmegaConf.save(cfg, f"{cfg.save_dir}/config.yaml", resolve=True)
+    print(f"save_dir: {os.path.abspath(cfg.save_dir)}")
 
     if cfg.track:
         import wandb
@@ -117,7 +118,7 @@ if __name__ == "__main__":
             job_type="train",
         )
 
-    writer = SummaryWriter(save_dir)
+    writer = SummaryWriter(cfg.save_dir)
     
     dataset = instantiate_from_config(cfg.train_dataset)
     sampler = RandomSampler(dataset, replacement=False)
