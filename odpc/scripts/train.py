@@ -63,7 +63,6 @@ def save_ckpt():
 
 
 def evaluate_and_save_best():
-
     if step % cfg.trainer.eval_freq == 0:
         ema.copy_to(ema_model.parameters())
         copy_ema_buffers()
@@ -130,6 +129,7 @@ if __name__ == "__main__":
         num_workers=cfg.trainer.num_dataload_workers,
         worker_init_fn=lambda worker_id: worker_init_fn(worker_id, base_seed=cfg.seed),
         persistent_workers=(cfg.trainer.num_dataload_workers > 0),
+        pin_memory=True,
     )
 
     model: BasePolicy = instantiate_from_config(cfg.model).to(device)
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 
     for step, data_batch in enumerate(train_dataloader):
         data_batch = common.to_tensor(data_batch, device)
-        
+            
         optimizer.zero_grad()
         
         # 使用混合精度训练
