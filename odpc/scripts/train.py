@@ -106,13 +106,13 @@ if __name__ == "__main__":
     if cfg.track:
         import wandb
         wandb.init(
-            project=cfg.wandb_project_name,
             entity=cfg.wandb_entity,
+            project=cfg.wandb_project_name,
             sync_tensorboard=True,
             config=OmegaConf.to_object(cfg),
             name=cfg.exp_name,
             save_code=True,
-            group="ODPC",
+            group=cfg.wandb_group,
             tags=["odpc"],
             job_type="train",
         )

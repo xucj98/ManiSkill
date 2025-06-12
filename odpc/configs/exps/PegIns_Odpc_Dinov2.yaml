@@ -6,8 +6,9 @@ pred_horizon: 16
 
 torch_deterministic: true
 track: true
-wandb_project_name: "ManiSkill"
 wandb_entity: null
+wandb_project_name: "ManiSkill"
+wandb_group: "PegIns_Odpc_Dinov2"
 
 obs_mode: state_dict+rgb+depth+segmentation
 control_mode: pd_ee_pose
