@@ -58,7 +58,7 @@ if __name__ == "__main__":
             config=OmegaConf.to_object(cfg),
             name=cfg.exp_name,
             save_code=True,
-            group="ODPC",
+            group=cfg.wandb_group,
             tags=["odpc"],
             job_type="eval",
         )

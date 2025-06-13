@@ -133,7 +133,7 @@ evaluator:
 
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 1e-4
+  lr: 1e-3
   betas: [0.95, 0.999]
   weight_decay: 1e-6
 
