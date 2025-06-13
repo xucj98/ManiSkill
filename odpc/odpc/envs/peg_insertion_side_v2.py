@@ -58,10 +58,10 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
         low[np.isnan(low)] = -10.
         high = self.action_space.high
         high[np.isnan(high)] = 10.
-        self.action_space = self._limit_space(self.action_space)
+        # self.action_space = self._limit_space(self.action_space)
         
         # 限制观察空间
-        self.observation_space = self._limit_space(self.observation_space)
+        # self.observation_space = self._limit_space(self.observation_space)
       
     def _limit_space(self, space):
         """递归遍历观察空间，将无限值替换为有限值"""
