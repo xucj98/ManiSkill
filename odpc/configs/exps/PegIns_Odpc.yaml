@@ -23,7 +23,7 @@ trainer:
   save_freq: 20000
   eval_freq: 20000
   log_freq: 1000
-  num_dataload_workers: 16
+  num_dataload_workers: 8
   use_amp: true
   amp_dtype: "float16"
 
