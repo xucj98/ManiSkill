@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import odpc.envs
 from odpc.data.data_conversion import DataConversion
-from odpc.models.odpc import ODPCModel
+from odpc.models.policy import DiffusionUnetImagePolicy
 from odpc.utils.utils import instantiate_from_config
 from odpc.evaluation.evaluate import Evaluator
 
@@ -28,6 +28,9 @@ def get_args():
     cfg = OmegaConf.load(args.config)
     cli = OmegaConf.from_dotlist(unknown)
     cfg = OmegaConf.merge(cfg, cli)
+
+    cfg.save_dir = f"runs/{cfg.wandb_group}/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    cfg.ckpt_path = args.ckpt_path
  
     return args, cfg
 
@@ -41,12 +44,10 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = cfg.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    save_dir = f"runs/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    cfg.save_dir = save_dir
-    print(f"save_dir: {os.path.abspath(save_dir)}")
     
-    os.makedirs(save_dir)
-    OmegaConf.save(cfg, f"{save_dir}/config.yaml", resolve=True)
+    os.makedirs(cfg.save_dir)
+    OmegaConf.save(cfg, f"{cfg.save_dir}/config.yaml", resolve=True)
+    print(f"save_dir: {os.path.abspath(cfg.save_dir)}")
 
     if cfg.track:
         import wandb
@@ -62,11 +63,9 @@ if __name__ == "__main__":
             job_type="eval",
         )
     
-    writer = SummaryWriter(save_dir)
+    writer = SummaryWriter(cfg.save_dir)
     
-    data_conversion: DataConversion = instantiate_from_config(cfg.data_conversion)
-
-    model: ODPCModel = instantiate_from_config(cfg.model).to(device)
+    model: DiffusionUnetImagePolicy = instantiate_from_config(cfg.model).to(device)
 
     if os.path.isdir(args.ckpt_path):
         files = [x for x in os.listdir(args.ckpt_path) if x.endswith(".pt")]
@@ -83,7 +82,7 @@ if __name__ == "__main__":
         ckpt_paths = {0: args.ckpt_path}
 
     # 创建evaluator
-    evaluator: Evaluator = instantiate_from_config(cfg.evaluator, model=model, dc=data_conversion)
+    evaluator: Evaluator = instantiate_from_config(cfg.evaluator, model=model)
 
     for step, ckpt_path in ckpt_paths.items():
         ckpt = torch.load(ckpt_path)

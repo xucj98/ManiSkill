@@ -58,8 +58,24 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
         low[np.isnan(low)] = -10.
         high = self.action_space.high
         high[np.isnan(high)] = 10.
-        self.action_space = gym.spaces.Box(low=low, high=high, dtype=self.action_space.dtype)
+        self.action_space = self._limit_space(self.action_space)
+        
+        # 限制观察空间
+        self.observation_space = self._limit_space(self.observation_space)
       
+    def _limit_space(self, space):
+        """递归遍历观察空间，将无限值替换为有限值"""
+        if isinstance(space, gym.spaces.Dict):
+            for key, sub_space in space.spaces.items():
+                space.spaces[key] = self._limit_space(sub_space)
+        elif isinstance(space, gym.spaces.Box):
+            low = space.low.copy()
+            high = space.high.copy()
+            low[np.isinf(low)] = -1e7
+            high[np.isinf(high)] = 1e7
+            return gym.spaces.Box(low=low, high=high, dtype=space.dtype)
+        return space
+
     def _load_scene(self, options: dict):
         sapien.physx.set_default_material(static_friction=20.0, dynamic_friction=20.0, restitution=0.0)
         super()._load_scene(options)
