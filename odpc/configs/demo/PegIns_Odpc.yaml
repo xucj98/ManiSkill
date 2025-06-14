@@ -7,6 +7,7 @@ traj_name: "PegIns_Odpc_Demo2k"
 num_procs: 20
 shader: "default"
 clip: true
+seed: 0
 
 motion_planning_args:
   env_id: ${env_id}
@@ -32,3 +33,4 @@ motion_planning_args:
   solve_kwargs:
     pre_insert_aug: 0
     start_after_grasp: true
+  seed: ${seed}
