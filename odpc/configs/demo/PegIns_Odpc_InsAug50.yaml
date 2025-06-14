@@ -1,9 +1,9 @@
 env_id: "PegInsertionSide-v2"
-obs_mode: "state_dict+rgb+depth+segmentation"
+obs_mode: "state_dict+rgb+depth"
 control_mode: "pd_ee_pose"
-num_traj: 2000
+num_traj: 8000
 only_count_success: true
-traj_name: "PegIns_Odpc_InsAug50_Demo2k"
+traj_name: "PegIns_Odpc_InsAug50_Demo8k"
 num_procs: 20
 shader: "default"
 clip: true
