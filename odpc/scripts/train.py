@@ -137,7 +137,7 @@ if __name__ == "__main__":
     optimizer = instantiate_from_config(cfg.optimizer, params=model.parameters())
     lr_scheduler = instantiate_from_config(cfg.lr_scheduler, optimizer=optimizer)
     
-    ema = EMAModel(parameters=model.parameters(), power=0.75)  
+    ema: EMAModel = instantiate_from_config(cfg.ema, parameters=model.parameters())
     ema_model: BasePolicy = instantiate_from_config(cfg.model).to(device)
     ema_model.eval()
 

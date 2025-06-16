@@ -138,3 +138,10 @@ lr_scheduler:
   num_warmup_steps: 500
   num_training_steps: ${trainer.total_iters}
 
+ema:
+  _target_: diffusers.training_utils.EMAModel
+  decay: 0.999
+  update_after_step: 5000
+  use_ema_warmup: true
+  inv_gamma: 1.0
+  power: 0.75
