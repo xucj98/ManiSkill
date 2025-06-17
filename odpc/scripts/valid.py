@@ -32,6 +32,8 @@ def get_args():
     cfg.save_dir = f"runs/{cfg.wandb_group}/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     cfg.ckpt_path = args.ckpt_path
  
+    print(OmegaConf.to_yaml(cfg, resolve=True))
+    
     return args, cfg
 
 

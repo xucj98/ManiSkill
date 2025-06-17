@@ -2,7 +2,6 @@ import os
 import argparse
 import multiprocessing as mp
 from omegaconf import OmegaConf
-from dataclasses import dataclass
 
 
 from odpc.data.demo.motionplanning import main as motion_planning
@@ -20,6 +19,8 @@ def get_args():
     cli = OmegaConf.from_dotlist(unknown)
     cfg = OmegaConf.merge(cfg, cli)
  
+    print(OmegaConf.to_yaml(cfg, resolve=True))
+
     return args, cfg
 
 

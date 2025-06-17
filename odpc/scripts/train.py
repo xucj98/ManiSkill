@@ -40,6 +40,8 @@ def get_args():
     cfg.demo_config = OmegaConf.load(cfg.train_dataset.data_path.replace(".h5", ".yaml"))
     cfg.save_dir = f"runs/{cfg.wandb_group}/{cfg.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
+    print(OmegaConf.to_yaml(cfg, resolve=True))
+
     return args, cfg
 
 
