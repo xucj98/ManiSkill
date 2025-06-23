@@ -16,8 +16,14 @@
 demo的存储方式作为基础设施需要优先实现，现在一个demo占用空间超过100GB，已经影响了后续大规模的实验。
 
 - [ ] **训练性能优化**
-    - [ ] 研究并实现 JPEG 压缩 RGB 数据
-    - [ ] 研究并实现 ZFP 压缩 Depth 数据
+    - [ ] 实现 JPEG 压缩 RGB 数据
+        - [x] 在`odpc.data.demo.compress.py`中实现 RGB 图像的 JPEG 压缩
+        - [ ] 在`odpc.sciprts.generate_demos.py`中增加数据集压缩的步骤
+        - [ ] 在`odpc.data.odpc_dataset.py`中支持读取压缩后的数据集
+        - [ ] 完成并通过对应的单元测试
+        - [ ] 在`odpc.scripts.vis.odpc_dataset.py`中增加数据集可视化的代码，用于验证`odpc_dataset`是否正确读取h5文件，其可以输出一个mp4视频
+        - [ ] 运行`odpc.sciprts.generate_demos.py`和`odpc.scripts.vis.odpc_dataset.py`，验证正确性
+    - [ ] 研究并实现 ZFP 压缩 Depth 数据，在生成demo的时候增加压缩这一步骤，并在数据集读取的时候支持读取压缩的demo
 
 
 ## 全面验证精度诅咒 *(P1)*

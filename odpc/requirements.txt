@@ -1,3 +1,8 @@
 omegaconf
 timm
 einops
+pytest
+diffusers
+tensorboard
+wandb
+mani_skill

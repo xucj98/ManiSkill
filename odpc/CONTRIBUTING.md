@@ -184,11 +184,13 @@ python scripts/evaluate_policy.py --config configs/exps/MyExperiment.yaml --ckpt
     -   如果您的 PR 解决了某个 GitHub Issue，请在描述中链接该 Issue (例如 `Closes #issue_number` 或 `Fixes #issue_number`)。
     -   (可选) 包含截图、设计决策的简要说明等。
 
-#### e. 测试（未来期望）
+#### e. 测试
 
--   对于所有新功能，请尽可能编写单元测试或集成测试。
+-   我们鼓励为新功能或重要的 Bug 修复编写单元测试和集成测试。
+-   测试的重点应放在验证核心功能的正确性、主要用户场景以及模块间的关键交互上。请不要针对边界条件编写单元测试，我们应该假设上层代码能够正确地调用，过多的单元测试对于review而言也是巨大的负担。
 -   对于 Bug 修复，请编写一个能够暴露该 Bug 的测试（如果之前没有）。
 -   在提交 Pull Request 之前，请确保所有测试都已通过。
+-   单元测试的代码应该放在 `tests/` 文件夹下面， `tests/` 目录结构应该与 `odpc/` 的目录结构保持一致，例如，对 `odpc/data/utils.py` 的测试应位于 `tests/data/test_utils.py`。对于集成测试，也请尽量根据代码结构选择合适的文件位置。
 - **测试硬件依赖**: 本项目中的部分测试可能需要特定的硬件环境，例如 NVIDIA GPU 和 CUDA 工具包。
     -   **标记 GPU 测试**: 需要 GPU 的测试用例会使用 `@pytest.mark.gpu` 进行标记。
     -   **自动跳过**: 如果在没有 CUDA 可用环境的设备上运行测试套件，这些 GPU 特定的测试会被自动跳过。
