@@ -1,0 +1,56 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# ODPC 项目开发规则
+
+## 项目概述
+ODPC项目专注于**A-IL (Active Imitation Learning)**框架的开发，核心目标是克服机器人模仿学习中的**"精度诅咒 (Curse of Precision)"**。
+
+## 必须参考的文档
+在开始任何开发工作前，请务必阅读和理解以下文档：
+
+### 核心文档
+- [README.md](mdc:README.md): 项目整体介绍、核心贡献、快速开始指南
+- [ARCHITECTURE.md](mdc:ARCHITECTURE.md): 详细的软件架构、模块划分、核心设计模式
+- [CONTRIBUTING.md](mdc:CONTRIBUTING.md): 编码风格、命名约定、提交规范、分支策略
+
+### 项目进度文档
+- [progress/TODOLIST.md](mdc:progress/TODOLIST.md): 当前任务列表、优先级、开发计划
+- [progress/DEV_LOG.md](mdc:progress/DEV_LOG.md): 开发日志、重要决策、遇到的问题和解决方案
+
+## 技术架构
+- 主要Python包：`odpc/` (未来可能重命名为ail_project)
+- 核心模块：`data/`, `envs/`, `evaluation/`, `models/`, `training/`, `utils/`
+- 配置文件：`configs/` 目录下的YAML文件
+- 脚本入口：`scripts/` 目录下的Python脚本
+
+## 开发规范
+- **编码风格**: 遵循PEP 8，使用Black格式化
+- **命名约定**: 
+  - 类名：`CamelCase`
+  - 函数/变量：`snake_case`
+  - 常量：`UPPER_SNAKE_CASE`
+- **提交规范**: 使用Conventional Commits格式
+- **文档要求**: 所有公开模块、类、函数都应有清晰的docstring
+
+## 当前开发重点
+根据TODOLIST.md的优先级：
+- **P0**: 代码文档整理、基础设施与效率优化
+- **P1**: 全面验证精度诅咒、A-IL框架开发
+- **P2**: 数据集内生性度量、可视化与调试
+
+## 特殊注意事项
+- 部分功能需要NVIDIA GPU和CUDA环境
+- GPU相关测试使用`@pytest.mark.gpu`标记
+- 演示数据存储在`demos/`目录（符号链接）
+- 实验输出存储在`runs/`目录（符号链接）
+
+## 质量保证
+在提供任何代码建议或实现时，请确保：
+1. 符合项目的整体架构设计
+2. 遵循既定的编码规范和命名约定
+3. 包含必要的文档和注释
+4. 考虑与现有模块的兼容性
+5. 关注性能和可维护性

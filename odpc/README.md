@@ -1,152 +1,146 @@
-# ODPC (Object Delta Pose Control) 项目
+# A-IL: 通过主动模仿学习克服机器人操作中的精度诅咒 (Active Imitation Learning to Overcome the Curse of Precision in Robotic Manipulation)
 
-## 项目概述
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
+<!-- 可选：如果你有许可文件 -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<!-- 可选：如果你有项目主页或论文链接 -->
+<!-- [![Project Page](https://img.shields.io/badge/Project-Page-green)](YOUR_PROJECT_PAGE_LINK) -->
+<!-- [![Paper](https://img.shields.io/badge/Paper-arXiv%3Axxxx.xxxx-red)](YOUR_PAPER_LINK) -->
 
-ODPC是一个基于扩散策略(Diffusion Policy)的机器人操作控制框架，专注于从人类视频中学习精细的操作。本项目在ManiSkill仿真环境中实现。
+## 📜 项目概述 (Overview)
 
-ODPC的核心创新点在于：
-1. 从人类RGBD视频中学习高精度的工具使用操作，无需任何机器人演示数据
-2. 通过预测物体在相机坐标系下的位姿变化（ΔT），避免了物体坐标系定义导致的歧义
-3. 实现了端到端的视觉-运动策略学习，保留了完整的视觉语义线索
-4. 支持闭环控制，能够根据实时反馈调整策略
+本项目旨在解决机器人模仿学习在推广至具有工业价值的高精度、接触丰富的操作任务时所面临的**数据效率瓶颈**。我们引入并系统研究了 **“精度诅咒 (Curse of Precision)”** —— 一个普遍存在的规律，即所需的专家演示数据量随任务精度要求呈指数级增长。
 
-## 技术原理
+为了克服这一挑战，我们提出了 **A-IL (Active Imitation Learning)**，一个新颖的“批量化失败引导的主动学习”框架。A-IL 通过智能地引导机器人探索、离线分析失败数据并请求针对性的批量专家演示，旨在显著提升在高精度任务上的数据采集效率和策略性能。
 
-ODPC通过以下步骤实现物体操作控制：
+本项目遵循一个“发现问题 -> 量化规律 -> 提出通用解法 -> 提供评估工具”的完整研究叙事。
 
-1. **位姿变化预测**：
-   - 使用Diffusion Policy预测物体在相机坐标系下的位姿变化（ΔT）
-   - 避免了物体坐标系定义导致的歧义
-   - 支持不同相机设备和物体的泛化
+## ✨ 核心贡献与特性 (Core Contributions & Features)
 
-2. **坐标变换**：
-   - 通过相机标定和机器人运动学模型
-   - 将ΔT转换为末端执行器的目标位姿
-   - 实现闭环控制
+1.  **系统性发现“精度诅咒” (Systematic Discovery of the "Curse of Precision")**:
+    *   首次将数据规模定律 (Scaling Law) 的研究从传统的泛化性维度扩展到任务精度维度。
+    *   通过实验定量揭示了在高精度操作模仿学习中，所需演示数据量随任务精度要求呈指数级增长的普遍规律。
+    *   为理解模仿学习在高精度应用上的瓶颈提供了关键的理论基石。
 
-3. **实时反馈**：
-   - 支持基于视觉反馈的实时调整
-   - 能够处理动态变化的任务需求
-   - 提高操作精度和鲁棒性
+2.  **A-IL 框架 (A General-Purpose Active Learning Framework - A-IL)**:
+    *   提出一个“批量化、周期性、恢复导向”的主动学习范式，以高效解决“精度诅咒”。
+    *   **核心流程**:
+        1.  **机器人探索 (Robot Rollout)**: 使用当前策略进行靶向性探索，主动发现薄弱环节和失败模式。
+        2.  **离线分析 (Offline Analysis)**: 智能分析探索轨迹，生成“高价值演示请求列表”。
+        3.  **批量专家演示 (Batched Human Demonstration)**: 根据请求列表，进行集中的、批量的、有针对性的数据采集。
+    *   将人机交互从“实时微观”提升到“周期宏观”，显著降低上下文切换成本。
 
-## 项目结构
+3.  **数据集内生性度量 (Novel Intrinsic Metric for Dataset Quality)**:
+    *   提出一个无需训练即可评估数据集质量的内生性度量，基于数据在预训练特征空间中的多样性与覆盖度。
+    *   可用于指导 A-IL 中更高效的数据采集，目标是主动优化数据集质量。
+
+## 🚀 快速开始 (Getting Started)
+
+### 1. 环境搭建 (Environment Setup)
+
+-   克隆本仓库：
+    ```bash
+    git clone [你的项目仓库URL]
+    cd [项目目录名称]
+    ```
+-   (推荐) 创建并激活 Conda 虚拟环境：
+    ```bash
+    conda create -n ail_env python=3.8
+    conda activate ail_env
+    ```
+-   安装依赖：
+    ```bash
+    pip install -r requirements.txt
+    # 如果您计划修改 odpc 包（未来可能重命名为 ail_project），并希望更改立即生效：
+    pip install -e .
+    ```
+
+### 2. 项目结构概览 (Project Structure)
 
 ```
-odpc/
-├── paper/                  # 论文
-├── configs/                # 配置文件目录
-├── envs/                   # 仿真环境
-├── models/                 # 模型实现
-├── data/                   # 数据处理相关代码
-├── utils/                  # 工具函数
-├── scripts/                # 运行脚本
-└── experiments/            # 实验结果和日志
-└── progress/               # 项目进度
+.
+├── ARCHITECTURE.md         # 项目架构详解
+├── CHANGELOG.md            # 版本更新日志
+├── CONTRIBUTING.md         # 贡献指南
+├── README.md               # 你正在阅读的文件
+├── configs/                # 实验和演示的配置文件
+├── odpc/                   # 核心 Python 包 (未来可能重命名)
+│   ├── data/               # 数据加载、处理、增强、数据集质量度量
+│   ├── envs/               # 仿真环境与装饰器
+│   ├── evaluation/         # 策略评估与指标计算
+│   ├── models/             # Agent、Policy、视觉编码器模型
+│   ├── training/           # 核心策略训练逻辑
+│   └── utils/              # 通用工具函数
+├── progress/
+│   ├── DEV_LOG.md          # 开发日志 (可选，更多细节可能在外部知识库)
+│   └── TODOLIST.md         # 当前任务列表
+├── scripts/                # 驱动型脚本 (训练、评估、数据生成、A-IL循环)
+├── requirements.txt        # Python 依赖
+└── setup.py                # 打包脚本
+```
+更详细的架构说明请参见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
+### 3. 运行核心工作流 (Running Core Workflows)
+
+(请注意：具体的脚本参数和运行方式请参考脚本本身的文档字符串或使用 `--help` 获取最新信息。部分脚本可能需要预先准备数据集或配置文件。)
+
+-   **生成初始专家演示数据**:
+    ```bash
+    python scripts/generate_initial_demos.py --config configs/demo/YourTask_InitialDemos.yaml
+    ```
+-   **训练一个基础的模仿学习策略**:
+    ```bash
+    python scripts/train_policy.py --config configs/exps/YourTask_BC_Baseline.yaml
+    ```
+-   **评估已训练的策略**:
+    ```bash
+    python scripts/evaluate_policy.py --config configs/exps/YourTask_BC_Baseline.yaml --ckpt-path path/to/your/model.pth
+    ```
+-   **运行 A-IL 主动学习循环**:
+    ```bash
+    python scripts/run_ail_cycle.py --config configs/exps/YourTask_AIL.yaml
+    ```
+-   **(可选) 量化“精度诅咒”实验**:
+    (此部分可能需要特定的脚本或多个训练/评估步骤，请参考相关文档或脚本说明)
+
+更多详细的教程和使用示例，请参见 `docs/tutorials/` 目录 (待创建)。
+
+## 📖 文档 (Documentation)
+
+-   [**ARCHITECTURE.md**](ARCHITECTURE.md): 详细描述了项目的软件架构、模块划分和核心设计模式。
+-   [**CONTRIBUTING.md**](CONTRIBUTING.md): 如何为本项目做出贡献，包括编码风格、分支策略和提交规范。
+-   [**CHANGELOG.md**](CHANGELOG.md): 项目的版本历史和重要变更记录 (v0.5.0及之前)。
+-   **GitHub Releases**: 对于 v0.6.0 及更新版本的详细变更，请访问项目的 [Releases 页面]([你的项目仓库URL]/releases)。
+-   **(未来) `docs/tutorials/`**: 包含更详细的使用教程和示例。
+
+## 🛠️ 如何贡献 (How to Contribute)
+
+我们欢迎各种形式的贡献！请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 以了解详细的贡献流程和规范。
+
+主要步骤包括：
+1.  Fork 本仓库。
+2.  创建您的特性分支 (`git checkout -b feat/YourAmazingFeature`)。
+3.  提交您的更改 (`git commit -m 'feat(scope): Add some amazing feature'`)。
+4.  将您的更改推送到分支 (`git push origin feat/YourAmazingFeature`)。
+5.  发起一个 Pull Request。
+
+## 📝 引用 (Citation)
+
+如果您的研究从本项目中受益，请考虑引用我们的工作 (如果适用，请在此处添加您的论文引用信息)：
+
+```bibtex
+@article{YourLastNameYYYYail,
+  title   = {A-IL: Active Imitation Learning to Overcome the Curse of Precision in Robotic Manipulation},
+  author  = {Your Name and Co-authors},
+  journal = {arXiv preprint arXiv:xxxx.xxxx (or Conference/Journal Name)},
+  year    = {YYYY}
+}
 ```
 
-## 主要功能
+## 📄 许可证 (License)
 
-1. **演示轨迹生成**
-   - 基于运动规划生成专家演示
-   - 支持随机化初始状态
-   - 支持多进程并行生成
+本项目采用 [MIT License](LICENSE) (或其他您选择的许可证)。
 
-2. **模型训练**
-   - 支持多种backbone (ResNet, DINOv2, PointNet++等)
-   - 支持语义分割输入
+---
 
-3. **评估与实验**
-   - 支持域内/域外评估
-   - 误差分析
-   - 支持多种评估指标
-   - 实验配置版本控制
-
-## 配置系统
-
-项目使用YAML配置文件管理所有实验参数，包括：
-
-- 模型配置（backbone类型、扩散模型参数等）
-- 数据集配置（数据路径、预处理方式等）
-- 训练配置（学习率、batch size等）
-- 实验配置（评估方式、日志记录等）
-
-每个实验都会记录：
-- 完整的配置文件
-- Git commit ID
-- 实验结果和日志
-- 模型检查点
-
-## 待优化方向
-
-1. **模型架构优化**
-   - 集成DINOv2作为视觉backbone
-   - 实现基于点云的DP3模型
-   - 探索多模态融合方案
-
-2. **演示数据增强**
-   - 实现3D空间随机化初始状态
-   - 增加轨迹多样性
-   - 添加噪声和扰动
-
-3. **语义信息利用**
-   - 将robot部分mask以减少 cross-embodiment gap
-   - 输入 object mask，mask as query 实现对多物体场景的学习
-
-
-## 使用说明
-
-1. **环境配置**
-```bash
-# 安装依赖
-pip install -r requirements.txt
-```
-
-2. **生成演示数据**
-```bash
-python scripts/generate_demos.py --config configs/demo/peg_insertion.yaml
-```
-
-3. **训练模型**
-```bash
-python scripts/train.py --config configs/experiment/train.yaml
-```
-
-4. **评估模型**
-```bash
-python scripts/evaluate.py --config configs/experiment/eval.yaml
-```
-
-## 开发计划
-
-1. **第一阶段：基础设施**
-   - [x] 基础ODPC实现
-   - [ ] 配置系统重构
-   - [ ] 实验管理工具
-
-2. **第二阶段：模型优化**
-   - [ ] DINOv2集成
-   - [ ] DP3实现
-
-3. **第三阶段：数据增强**
-   - [ ] 3D随机化实现
-   - [ ] 轨迹多样性增强
-   - [ ] 数据增强pipeline
-
-4. **第四阶段：消融实验**
-   - [ ] OOD评估
-   - [ ] 误差分析
-   - [ ] 更多的环境测试
-    
-
-## 贡献指南
-
-欢迎提交Issue和Pull Request来帮助改进项目。在提交PR时，请确保：
-
-1. 代码符合项目的代码规范
-2. 添加必要的测试
-3. 更新相关文档
-4. 提供详细的改动说明
-
-## 许可证
-
-本项目采用MIT许可证。详见LICENSE文件。 
+我们希望这个项目能为机器人学习领域，特别是在高精度操作任务的数据效率方面，提供有价值的见解和工具。如果您有任何问题或建议，请随时通过 GitHub Issues 与我们联系。
