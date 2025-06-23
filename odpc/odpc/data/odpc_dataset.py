@@ -8,6 +8,8 @@ from omegaconf import DictConfig
 from odpc.utils import utils
 from odpc.data.obs_processors.base_processor import BaseObsProcessor
 from odpc.data.act_processors.base_processor import BaseActProcessor
+from odpc.data.utils import decode_jpeg_sequence, is_compressed_rgb_dataset
+
 class ODPCDataset(Dataset):
     def __init__(
             self,
@@ -72,6 +74,23 @@ class ODPCDataset(Dataset):
         if self._h5_file is None:
             self._h5_file = h5py.File(self.data_path, 'r')
 
+    def _get_slice_data_with_compression(self, file, slice_indices):
+        """获取切片数据，支持压缩数据的自动解码"""
+        if isinstance(file, (h5py.File, h5py.Group)):
+            return {key: self._get_slice_data_with_compression(file[key], slice_indices) for key in file.keys()}
+        elif isinstance(file, h5py.Dataset):
+            data = file[slice_indices]
+            
+            # 检查是否为压缩的RGB数据
+            if is_compressed_rgb_dataset(file):
+                # 解码压缩的RGB数据
+                decoded_data = decode_jpeg_sequence(data)
+                return decoded_data
+            else:
+                return data
+        else:
+            raise NotImplementedError(f"H5 file type {type(file)} not supported")
+
     def __getitem__(self, index):
         self._ensure_h5_open()
 
@@ -87,7 +106,8 @@ class ODPCDataset(Dataset):
             else:
                 raise NotImplementedError(f"H5 file type {type(file)} not supported")
 
-        obs = get_slice_data(self._h5_file[f"{traj_key}/obs"], slice(start, start + self.obs_horizon))
+        # 使用支持压缩的数据获取方法
+        obs = self._get_slice_data_with_compression(self._h5_file[f"{traj_key}/obs"], slice(start, start + self.obs_horizon))
         for obs_processor in self.obs_processors:
             obs = obs_processor.process(obs)
 

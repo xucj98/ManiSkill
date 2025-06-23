@@ -3,27 +3,13 @@ import h5py
 from tqdm import tqdm
 import argparse
 import numpy as np
-from PIL import Image
-import io
 
-from typing import Union, List
+from typing import Union
+
+from odpc.data.utils import compress_rgb_sequence_to_jpg_bytes
 
 # JPG压缩质量
 DEFAULT_JPG_QUALITY = 85
-
-def compress_rgb_sequence_to_jpg_bytes(rgb_sequence_np: np.ndarray, jpg_quality: int) -> list:
-    """
-    将 (t, h, w, 3) uint8 NumPy 数组的RGB序列压缩为JPG字节列表。
-    """
-    jpg_byte_list = []
-    for i in range(rgb_sequence_np.shape[0]):
-        frame_np = rgb_sequence_np[i]
-        pil_image = Image.fromarray(frame_np)
-        with io.BytesIO() as output_buffer:
-            pil_image.save(output_buffer, format="JPEG", quality=jpg_quality)
-            jpg_bytes = output_buffer.getvalue()
-        jpg_byte_list.append(jpg_bytes)
-    return jpg_byte_list
 
 def _main(
         src_obj: Union[h5py.Group, h5py.Dataset], 
@@ -94,7 +80,8 @@ def main(args):
     print(f"Processing finished. \n"
           f"Before Compress: size={os.path.getsize(traj_path) / (1024*1024):.2f} MB \n"
           f"After Compress: size={os.path.getsize(output_path) / (1024*1024):.2f} MB \n")
-
+    
+    return output_path
 
 if __name__ == '__main__':
     args = get_args()
