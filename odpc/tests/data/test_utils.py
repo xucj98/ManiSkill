@@ -114,7 +114,23 @@ class TestIntegration:
         # 验证形状一致
         assert decompressed_data.shape == original_data.shape
         assert decompressed_data.dtype == np.uint8
+        
         # 验证MAE - 这是集成测试的核心验证
         mae = np.mean(np.abs(original_data.astype(float) - decompressed_data.astype(float)))
         print(f"MAE for smooth image: {mae}")
-        assert mae < 10  # 平滑图片下，JPEG误差应很小 
+        assert mae < 10  # 平滑图片下，JPEG误差应很小
+        
+        # 验证压缩率 - 同时测试压缩效果
+        original_size = original_data.nbytes
+        compressed_size = sum(len(frame) for frame in compressed_bytes)
+        compression_ratio = original_size / compressed_size
+        
+        print(f"原始大小: {original_size / 1024:.2f} KB")
+        print(f"压缩后大小: {compressed_size / 1024:.2f} KB")
+        print(f"压缩比: {compression_ratio:.2f}x")
+        
+        # 验证压缩确实有效
+        assert compressed_size < original_size
+        assert compression_ratio > 1.0
+        # 对于平滑图片，在质量85下应该达到至少5倍压缩比
+        assert compression_ratio >= 5.0, f"平滑图片在质量85下应该达到至少5倍压缩比，实际为 {compression_ratio:.2f}x" 

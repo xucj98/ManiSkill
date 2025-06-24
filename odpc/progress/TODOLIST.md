@@ -23,7 +23,15 @@ demo的存储方式作为基础设施需要优先实现，现在一个demo占用
         - [x] 完成并通过对应的单元测试
         - [x] 在`odpc.scripts.vis.odpc_dataset.py`中增加数据集可视化的代码，用于验证`odpc_dataset`是否正确读取h5文件，其可以输出一个mp4视频
         - [x] 运行`odpc.scripts.generate_demos.py`和`odpc.scripts.vis.odpc_dataset.py`，验证正确性
+        - [x] 在单元测试中对JPEG压缩率进行测试
     - [ ] 研究并实现 ZFP 压缩 Depth 数据，在生成demo的时候增加压缩这一步骤，并在数据集读取的时候支持读取压缩的demo
+        - [ ] 在`odpc.data.utils.py`中实现 ZFP 压缩和解压缩 depth 图像
+        - [ ] 在单元测试中对depth图像的压缩率和MAE进行测试
+        - [ ] 在`odpc.data.demo.compress.py`中增加对depth图像的压缩
+        - [ ] 在`odpc.data.odpc_dataset.py`中支持读取压缩后的数据集
+        - [ ] 完成并通过对应的单元测试
+        - [ ] 在`odpc.scripts.vis.odpc_dataset.py`中增加深度图的可视化的代码，把深度图和rgb图片在宽度上concat一起显示就可以了
+        - [ ] 运行`odpc.scripts.generate_demos.py`和`odpc.scripts.vis.odpc_dataset.py`，验证正确性
 
 
 ## 全面验证精度诅咒 *(P1)*
