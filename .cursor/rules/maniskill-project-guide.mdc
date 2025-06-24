@@ -1,0 +1,113 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# ManiSkill 项目开发指南
+
+## 项目概述
+
+ManiSkill 是一个强大的机器人仿真和训练统一框架，基于 [SAPIEN](mdc:ManiSkill/https:/sapien.ucsd.edu) 构建，专注于操作技能。项目包含两个主要部分：
+
+1. **ManiSkill 主框架** ([mani_skill/](mdc:ManiSkill/mani_skill)) - 机器人仿真和训练的核心框架
+2. **ODPC 子项目** ([odpc/](mdc:ManiSkill/odpc)) - 主动模仿学习 (A-IL) 研究项目
+
+## 核心架构
+
+### ManiSkill 主框架结构
+
+- **[mani_skill/envs/](mdc:ManiSkill/mani_skill/envs)** - 机器人环境定义
+- **[mani_skill/agents/](mdc:ManiSkill/mani_skill/agents)** - 机器人智能体实现
+- **[mani_skill/sensors/](mdc:ManiSkill/mani_skill/sensors)** - 传感器数据处理
+- **[mani_skill/render/](mdc:ManiSkill/mani_skill/render)** - 渲染系统
+- **[mani_skill/utils/](mdc:ManiSkill/mani_skill/utils)** - 通用工具函数
+- **[mani_skill/examples/](mdc:ManiSkill/mani_skill/examples)** - 示例代码和教程
+
+### ODPC 子项目结构
+
+ODPC 实现了 **A-IL (Active Imitation Learning)** 框架，用于克服机器人操作中的"精度诅咒"：
+
+- **[odpc/odpc/models/](mdc:ManiSkill/odpc/odpc/models)** - 策略模型和智能体架构
+- **[odpc/odpc/data/](mdc:ManiSkill/odpc/odpc/data)** - 数据处理和管理
+- **[odpc/odpc/envs/](mdc:ManiSkill/odpc/odpc/envs)** - 仿真环境
+- **[odpc/odpc/training/](mdc:ManiSkill/odpc/odpc/training)** - 训练逻辑
+- **[odpc/odpc/evaluation/](mdc:ManiSkill/odpc/odpc/evaluation)** - 评估和指标计算
+- **[odpc/scripts/](mdc:ManiSkill/odpc/scripts)** - 训练、评估、数据生成脚本
+- **[odpc/configs/](mdc:ManiSkill/odpc/configs)** - 实验和演示配置文件
+
+## 开发规范
+
+### 代码风格
+
+- 遵循 Python PEP 8 规范
+- 使用类型注解
+- 编写详细的文档字符串
+- 模块和类名使用下划线命名法
+- 常量使用大写字母
+
+### 文件组织
+
+- 每个模块应有清晰的职责分工
+- 配置文件使用 YAML 格式
+- 脚本文件放在 `scripts/` 目录下
+- 测试文件放在 `tests/` 目录下
+
+### 依赖管理
+
+- 主要依赖在 [pyproject.toml](mdc:ManiSkill/pyproject.toml) 中定义
+- ODPC 特定依赖在 [odpc/requirements.txt](mdc:ManiSkill/odpc/requirements.txt) 中
+- 使用虚拟环境管理依赖
+
+## 核心概念
+
+### A-IL 框架
+
+A-IL 是一个"批量化失败引导的主动学习"框架，包含以下核心流程：
+
+1. **机器人探索** - 使用当前策略进行靶向性探索
+2. **离线分析** - 智能分析探索轨迹，生成高价值演示请求
+3. **批量专家演示** - 根据请求列表进行集中的、批量的数据采集
+
+### 精度诅咒 (Curse of Precision)
+
+这是 ODPC 项目研究的核心问题：在高精度操作模仿学习中，所需演示数据量随任务精度要求呈指数级增长。
+
+## 开发工作流
+
+### 环境设置
+
+```bash
+# 安装 ManiSkill
+pip install --upgrade mani_skill
+pip install torch
+
+# 安装 ODPC 依赖
+cd odpc
+pip install -r requirements.txt
+pip install -e .
+```
+
+### 常用命令
+
+- **生成演示数据**: `python odpc/scripts/generate_demos.py`
+- **训练策略**: `python odpc/scripts/train.py`
+- **评估策略**: `python odpc/scripts/valid.py`
+
+### 配置文件
+
+- 实验配置: [odpc/configs/exps/](mdc:ManiSkill/odpc/configs/exps)
+- 演示配置: [odpc/configs/demo/](mdc:ManiSkill/odpc/configs/demo)
+
+## 文档资源
+
+- 项目架构: [odpc/ARCHITECTURE.md](mdc:ManiSkill/odpc/ARCHITECTURE.md)
+- 贡献指南: [odpc/CONTRIBUTING.md](mdc:ManiSkill/odpc/CONTRIBUTING.md)
+- 变更日志: [odpc/CHANGELOG.md](mdc:ManiSkill/odpc/CHANGELOG.md)
+- 开发进度: [odpc/progress/](mdc:ManiSkill/odpc/progress)
+
+## 注意事项
+
+- ManiSkill 目前处于 Beta 版本，可能存在一些 bug
+- 主要支持 Linux 系统，Windows 和 MacOS 支持有限
+- 需要设置 Vulkan 进行渲染
+- GPU 并行仿真需要 NVIDIA GPU 支持
