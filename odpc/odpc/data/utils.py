@@ -85,29 +85,3 @@ def is_compressed_rgb_dataset(dataset) -> bool:
     return (hasattr(dataset, 'attrs') and 
             'compression_type' in dataset.attrs and 
             dataset.attrs['compression_type'] == 'jpeg')
-
-
-def get_compression_info(dataset) -> dict:
-    """
-    获取压缩数据的信息
-    
-    Args:
-        dataset: h5py数据集对象
-    
-    Returns:
-        dict: 包含压缩信息的字典
-    """
-    if not is_compressed_rgb_dataset(dataset):
-        return {}
-    
-    info = {}
-    if 'original_shape' in dataset.attrs:
-        info['original_shape'] = dataset.attrs['original_shape']
-    if 'original_dtype' in dataset.attrs:
-        info['original_dtype'] = dataset.attrs['original_dtype']
-    if 'compression_type' in dataset.attrs:
-        info['compression_type'] = dataset.attrs['compression_type']
-    if 'jpeg_quality' in dataset.attrs:
-        info['jpeg_quality'] = dataset.attrs['jpeg_quality']
-    
-    return info 
