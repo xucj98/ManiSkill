@@ -230,7 +230,7 @@ class PrecisionCurseReporter:
                     continue
                 
                 results.append({
-                    "target_metric": target_metric,
+                    "metric": target_metric,
                     "precision": precision,
                     "estimated_num_data": estimated_nd_orig,
                 })
@@ -241,7 +241,7 @@ class PrecisionCurseReporter:
     def report_estimated_data_vs_precision(self, df: pd.DataFrame):
         """
         绘制第二组图：估计的 NumData vs. Precision, 按 TargetMetric 分组。
-        df_estimated 包含列: "target_metric", "precision", "estimated_num_data"
+        df_estimated 包含列: "metric", "precision", "estimated_num_data"
         """
         plot_cfg = self.cfg_report_num_data_vs_precision
         
@@ -254,7 +254,7 @@ class PrecisionCurseReporter:
 
         return self._report_groups(
             df, 
-            "target_metric", "precision", "estimated_num_data", 
+            "metric", "precision", "estimated_num_data", 
             plot2_x_transformer, plot2_y_transformer, 
             plot_cfg,
         )
