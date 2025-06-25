@@ -5,7 +5,54 @@
 
 ---
 
-## 2025-06-23
+## 2025-06-25
+
+### “精度诅咒”实验结果量化和可视化 
+
+*   **状态**:
+    *   完成 `Reporter` 第二部分，即各个 目标metric 下，num_data w.r.t. precision 的曲线。
+    *   在 `Reporter` 中抽象出 `_report_single_group` 和 `_report_groups` 两个函数，可以被两个部分共用，负责绘图和数据分析
+*   **讨论点**
+    *   目前在 Peg Insertion 这个任务上，使用PD EE Delta Pose控制，进行了18个实验: 
+        *   容差 5mm 下进行了 num_traj = 200, 500, 1k, 2k, 4k, 8k，
+        *   容差 7mm 下 num_traj = 1k, 2k, 4k,
+        *   容差 10mm, 20mm, 40mm 下各有3个，num_traj = 500, 1k, 2k
+        
+        从拟合的结果来看，不同的 success_rate 下，都能比较好的拟合 log(num_data) = a * 1 / (precision - c) + b，其中 c 是任务精度的上限，设置为4mm。但是这里的 precision 只有 5个点，可能不是很有说服力。而且从拟合的曲线上来看，5mm ~ 7mm 中间的空间太大了，最好补一个 6mm 的实验。
+
+        以及目前是单个设定下的实验结果，最好还能尝试不同的任务，不同的设定（backbone，observation，action）的结果，但是如果想充分测试，每组实验包括6个精度，每个精度下包括6个轨迹数量，就要36次实验，每次实验需要单卡4090跑12～16小时，感觉也太费劲了。可能还需要把代码重构成支持`hydra`，现在用了`omegaconfg`但是没有用`hydra`。
+
+    * 需要开始考虑`A-IL`框架的设计和编写了。这个框架感觉也是一个很重的工作，一轮完整的训练循环涉及到多次的数据收集和训练。
+
+    * 感觉可以一边跑实验，一边写`A-IL`的框架代码。但是现在这个架构跑实验每个都得手动跑，还是先重构`hydra`呢。感觉重构也很麻烦，或者就先写一个bash脚本来批量跑实验。
+
+
+## 2025-06-24
+
+### “精度诅咒”实验结果量化和可视化 
+
+*   **动机**: 实现“精度诅咒”分析脚本，保证通用性和可配置性，支持未来不同任务/数据源。
+*   **核心架构**:
+    *   `Analyzer`: 顶层协调，`scripts/analyze_precision_curse.py` 驱动。
+    *   `Reader`: 数据源交互 (当前 `WandbReader`)。
+        *   支持灵活的 "OR of ANDs" 筛选器配置。
+    *   `Processor`: `data_schema` 驱动，将原始数据转为标准 `pd.DataFrame`。
+        *   从原始数据中提取出分析所需要的三个数据：`num_data`, `metric`, `precision`
+        *   `transform` 统一处理字段数据，可以支持如 log(x), log(1-x) 等逐点操作 或 max(x) 等聚合操作
+    *   `Reporter`: 基于 `Processor` 输出的 DataFrame 进行绘图/分析。
+*   **配置**: OmegaConf + YAML，通过 `_target_` 和自定义 `instantiate` 实现组件化。
+*   **关键接口**:
+    *   `Reader` -> `List[原始运行对象]` -> `Processor`
+    *   `Processor` -> `pd.DataFrame` -> `Reporter`
+*   **讨论点**:
+    *   `Reader`/`Processor` 分离：确认分离设计，以 `Processor` 输出的 DataFrame 为标准中间格式，有利于模块化和未来扩展不同数据源。
+    *   WandB 筛选：`WandbReader` 目前客户端筛选，大规模项目下可能需优化。可以看看 `wandb` 是否提供了通过`filter` 读取数据的api接口
+*   **状态**: 
+    *   完成 `Reader`, `Processor`，`Transforms` 代码。
+    *   完成 `Analyzer.run()` 和 `scripts/analyze_precision_curse.py` 框架代码。
+    *   完成 `Reporter` 第一部分，即各个精度下， metric w.r.t. num_data 的曲线。
+*   **下一步**:  
+    *   `Report` 第二部分，即各个 目标metric 下，num_data w.r.t. precision 的曲线。
 
 ### demo存储优化
 - **背景**: 当前demo的数据集太大了。

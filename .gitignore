@@ -9,6 +9,7 @@ dist/
 runs/
 demos/
 wandb/
+analysis_outputs/
 
 # ipython/jupyter notebooks
 # *.ipynb

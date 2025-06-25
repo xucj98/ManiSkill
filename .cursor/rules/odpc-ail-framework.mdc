@@ -1,0 +1,164 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# ODPC A-IL 框架开发指南
+
+## 项目背景
+
+ODPC (Object Delta Pose Control) 项目实现了 **A-IL (Active Imitation Learning)** 框架，旨在解决机器人模仿学习中的"精度诅咒"问题。该项目遵循"发现问题 -> 量化规律 -> 提出通用解法 -> 提供评估工具"的研究叙事。
+
+## 核心研究贡献
+
+### 1. 精度诅咒 (Curse of Precision)
+- **发现**: 在高精度操作模仿学习中，所需演示数据量随任务精度要求呈指数级增长
+- **验证**: 通过 Peg-in-Hole 基准任务系统性地验证了这一规律
+- **意义**: 解释了为何简单扩大数据集策略在高精度任务上不可持续
+
+### 2. A-IL 主动学习框架
+- **核心思想**: 批量化失败引导的主动学习
+- **创新点**: 将人机交互从"实时微观"提升到"周期宏观"
+- **优势**: 显著降低上下文切换成本，提高数据采集效率
+
+### 3. 数据集内生性度量
+- **目标**: 无需训练即可评估数据集质量
+- **方法**: 基于预训练特征空间的多样性与覆盖度
+- **应用**: 指导 A-IL 中更高效的数据采集
+
+## A-IL 算法流程
+
+### Cycle 0 (初始化)
+1. **初始批量专家演示** - 专家提供初始数据集 D₀
+2. **初始模型训练** - 得到策略 π₀ (推荐使用 Ensemble)
+
+### Cycle i (i ≥ 1)
+1. **策略自主部署与日志记录**
+   - 将当前策略 πᵢ₋₁ 部署到机器人上
+   - 起始状态选择策略:
+     - Cycle 1: 从 D₀ 定义的可行初始状态空间随机采样
+     - Cycle i > 1: 从上一轮分析出的"高价值状态池"中采样
+   - 记录所有执行轨迹
+
+2. **离线分析与高价值状态识别**
+   - 输入: 机器人轨迹日志
+   - 核心模块: "高价值状态识别"
+   - 策略: 粗筛(失败定位) + 精选(不确定性/影响力排序) + 多样化采样
+   - 输出: 新的"高价值初始状态"集合
+
+3. **靶向性批量专家演示**
+   - 输入: 高价值状态集合
+   - 操作: 专家进行集中的、批量的、有针对性的恢复性演示
+   - 输出: 新数据集 D'ᵢ
+
+4. **聚合与再训练**
+   - 数据聚合: Dᵢ = Dᵢ₋₁ ∪ D'ᵢ
+   - 模型重训练: 在 Dᵢ 上重新训练模型 πᵢ
+
+## 核心模块架构
+
+### 数据处理模块 ([odpc/odpc/data/](mdc:ManiSkill/odpc/odpc/data))
+- **[odpc/odpc/data/imitation_dataset.py](mdc:ManiSkill/odpc/odpc/data/imitation_dataset.py)** - 主要数据集类
+- **[odpc/odpc/data/demo/](mdc:ManiSkill/odpc/odpc/data/demo)** - 演示数据生成工具
+- **[odpc/odpc/data/act_processors/](mdc:ManiSkill/odpc/odpc/data/act_processors)** - 动作数据处理
+- **[odpc/odpc/data/obs_processors/](mdc:ManiSkill/odpc/odpc/data/obs_processors)** - 观测数据处理
+
+### 模型模块 ([odpc/odpc/models/](mdc:ManiSkill/odpc/odpc/models))
+- **[odpc/odpc/models/policy/](mdc:ManiSkill/odpc/odpc/models/policy)** - 策略模型实现
+- **[odpc/odpc/models/agent/](mdc:ManiSkill/odpc/odpc/models/agent)** - 智能体封装器
+- **[odpc/odpc/models/vision/](mdc:ManiSkill/odpc/odpc/models/vision)** - 视觉编码器
+
+### 环境模块 ([odpc/odpc/envs/](mdc:ManiSkill/odpc/odpc/envs))
+- **[odpc/odpc/envs/peg_insertion_side_v2.py](mdc:ManiSkill/odpc/odpc/envs/peg_insertion_side_v2.py)** - 主要实验环境
+- **[odpc/odpc/envs/wrappers/](mdc:ManiSkill/odpc/odpc/envs/wrappers)** - 环境装饰器
+
+### 训练模块 ([odpc/odpc/training/](mdc:ManiSkill/odpc/odpc/training))
+- 核心策略训练逻辑
+- A-IL 循环实现
+
+### 评估模块 ([odpc/odpc/evaluation/](mdc:ManiSkill/odpc/odpc/evaluation))
+- **[odpc/odpc/evaluation/evaluate.py](mdc:ManiSkill/odpc/odpc/evaluation/evaluate.py)** - 策略评估
+- 指标计算和性能分析
+
+## 脚本和配置
+
+### 核心脚本 ([odpc/scripts/](mdc:ManiSkill/odpc/scripts))
+- **[odpc/scripts/generate_demos.py](mdc:ManiSkill/odpc/scripts/generate_demos.py)** - 生成演示数据
+- **[odpc/scripts/train.py](mdc:ManiSkill/odpc/scripts/train.py)** - 训练策略
+- **[odpc/scripts/valid.py](mdc:ManiSkill/odpc/scripts/valid.py)** - 验证策略
+
+### 配置文件 ([odpc/configs/](mdc:ManiSkill/odpc/configs))
+- **[odpc/configs/exps/](mdc:ManiSkill/odpc/configs/exps)** - 实验配置
+- **[odpc/configs/demo/](mdc:ManiSkill/odpc/configs/demo)** - 演示配置
+
+## 开发规范
+
+### 代码组织原则
+1. **模块化设计** - 每个模块有明确的职责
+2. **接口一致性** - 保持模块间接口的一致性
+3. **可扩展性** - 设计时考虑未来扩展需求
+4. **可测试性** - 代码结构便于单元测试
+
+### 命名规范
+- 类名: PascalCase (如 `ImitationDataset`)
+- 函数名: snake_case (如 `generate_demos`)
+- 常量: UPPER_CASE (如 `DEFAULT_CONFIG`)
+- 文件名: snake_case (如 `imitation_dataset.py`)
+
+### 文档要求
+- 所有公共接口必须有文档字符串
+- 复杂算法需要详细的注释说明
+- 配置文件需要说明各参数的作用
+
+## 实验工作流
+
+### 1. 环境准备
+```bash
+cd odpc
+pip install -r requirements.txt
+pip install -e .
+```
+
+### 2. 数据生成
+```bash
+python scripts/generate_demos.py --config configs/demo/YourTask_InitialDemos.yaml
+```
+
+### 3. 基础训练
+```bash
+python scripts/train.py --config configs/exps/YourTask_BC_Baseline.yaml
+```
+
+### 4. 策略评估
+```bash
+python scripts/valid.py --config configs/exps/YourTask_BC_Baseline.yaml --ckpt-path path/to/model.pth
+```
+
+### 5. A-IL 循环
+```bash
+python scripts/run_ail_cycle.py --config configs/exps/YourTask_AIL.yaml
+```
+
+## 关键概念
+
+### 高价值状态识别
+- **失败定位**: 通过后置条件验证筛选失败轨迹
+- **不确定性排序**: 利用模型认知不确定性评估学习价值
+- **多样化采样**: 通过聚类等方法避免信息冗余
+
+### 恢复导向学习
+- 专家演示是完整的纠正性轨迹
+- 从失败状态开始，教会策略如何恢复
+- 包含丰富的时序和动态信息
+
+### 批量化主动学习
+- 解耦人机活动，降低上下文切换成本
+- 周期性交互而非实时交互
+- 最大化机器人探索价值，高效利用人类演示
+
+## 注意事项
+
+- 确保环境配置正确，特别是 Vulkan 渲染设置
+- 数据格式需要符合 HDF5 标准
+- 模型检查点需要定期保存和备份
+- 实验日志要详细记录，便于复现和分析
