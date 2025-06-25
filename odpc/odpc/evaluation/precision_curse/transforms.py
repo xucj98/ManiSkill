@@ -43,6 +43,9 @@ class MultiplyTransform(BaseTransform):
     def __call__(self, value: Union[float, int, pd.Series]) -> Any:
         return value * self.factor
     
+    def inverse(self, value: Union[float, int, pd.Series]) -> float:
+        return value / self.factor
+
 
 class LogTransform(BaseTransform):
     def __init__(self, base: float = 10):
@@ -52,6 +55,9 @@ class LogTransform(BaseTransform):
     def __call__(self, value: Union[float, int, pd.Series]) -> float:
         return np.log(value) / np.log(self.base)
     
+    def inverse(self, value: Union[float, int, pd.Series]) -> float:
+        return self.base ** value
+    
 
 class LogOneMinusTransform(BaseTransform):
     def __init__(self, base: float = 10):
@@ -60,3 +66,19 @@ class LogOneMinusTransform(BaseTransform):
 
     def __call__(self, value: Union[float, int, pd.Series]) -> float:
         return np.log(1 - value) / np.log(self.base)
+
+    def inverse(self, value: Union[float, int, pd.Series]) -> float:
+        return 1 - self.base ** value
+    
+
+class InverseShiftedTransform(BaseTransform):
+    def __init__(self, shift: float = 0):
+        super().__init__()
+        self.shift = shift
+
+    def __call__(self, value: Union[float, int, pd.Series]) -> float:
+        return 1 / (value - self.shift)
+    
+    def inverse(self, value: Union[float, int, pd.Series]) -> float:
+        return self.shift + 1 / value
+

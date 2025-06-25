@@ -5,6 +5,15 @@
 
 ---
 
+## 2025-06-25
+
+### “精度诅咒”实验结果量化和可视化 
+
+*   **状态**:
+    *   完成 `Reporter` 第二部分，即各个 目标metric 下，num_data w.r.t. precision 的曲线。
+    *   在 `Reporter` 中抽象出 `_report_single_group` 和 `_report_groups` 两个函数，可以被两个部分共用，负责绘图和数据分析
+
+
 ## 2025-06-24
 
 ### “精度诅咒”实验结果量化和可视化 
@@ -26,11 +35,11 @@
     *   `Reader`/`Processor` 分离：确认分离设计，以 `Processor` 输出的 DataFrame 为标准中间格式，有利于模块化和未来扩展不同数据源。
     *   WandB 筛选：`WandbReader` 目前客户端筛选，大规模项目下可能需优化。可以看看 `wandb` 是否提供了通过`filter` 读取数据的api接口
 *   **状态**: 
-    * 完成 `Reader`, `Processor`，`Transforms` 代码。
-    * 完成 `Analyzer.run()` 和 `scripts/analyze_precision_curse.py` 框架代码。
-    * 完成 `Reporter` 第一部分，即各个精度下， metric w.r.t. num_data 的曲线。
+    *   完成 `Reader`, `Processor`，`Transforms` 代码。
+    *   完成 `Analyzer.run()` 和 `scripts/analyze_precision_curse.py` 框架代码。
+    *   完成 `Reporter` 第一部分，即各个精度下， metric w.r.t. num_data 的曲线。
 *   **下一步**:  
-    * `Report` 第二部分，即各个 目标metric 下，num_data w.r.t. precision 的曲线。
+    *   `Report` 第二部分，即各个 目标metric 下，num_data w.r.t. precision 的曲线。
 
 ### demo存储优化
 - **背景**: 当前demo的数据集太大了。
