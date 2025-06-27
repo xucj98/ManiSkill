@@ -10,6 +10,7 @@ runs/
 demos/
 wandb/
 analysis_outputs/
+vis_output/
 
 # ipython/jupyter notebooks
 # *.ipynb
