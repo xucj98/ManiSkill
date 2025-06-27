@@ -15,8 +15,8 @@
 
 demo的存储方式作为基础设施需要优先实现，现在一个demo占用空间超过100GB，已经影响了后续大规模的实验。
 
-- [x] **训练性能优化**
-    - [x] 实现 JPEG 压缩 RGB 数据
+- [ ] **训练性能优化**
+    - [ ] 实现 JPEG 压缩 RGB 数据
         - [x] 在`odpc.data.demo.compress.py`中实现 RGB 图像的 JPEG 压缩
         - [x] 在`odpc.scripts.generate_demos.py`中增加数据集压缩的步骤
         - [x] 在`odpc.data.odpc_dataset.py`中支持读取压缩后的数据集
@@ -24,6 +24,7 @@ demo的存储方式作为基础设施需要优先实现，现在一个demo占用
         - [x] 在`odpc.scripts.vis.odpc_dataset.py`中增加数据集可视化的代码，用于验证`odpc_dataset`是否正确读取h5文件，其可以输出一个mp4视频
         - [x] 运行`odpc.scripts.generate_demos.py`和`odpc.scripts.vis.odpc_dataset.py`，验证正确性
         - [x] 在单元测试中对JPEG压缩率进行测试
+        - [ ] 多线程并行
     - [ ] ~~研究并实现 ZFP 压缩 Depth 数据，在生成demo的时候增加压缩这一步骤，并在数据集读取的时候支持读取压缩的demo~~
         - [ ] ~~在`odpc.data.utils.py`中实现 ZFP 压缩和解压缩 depth 图像~~
         - [ ] ~~在单元测试中对depth图像的压缩率和MAE进行测试~~
@@ -63,10 +64,10 @@ demo的存储方式作为基础设施需要优先实现，现在一个demo占用
 
 根据A-IL算法流程，完成整体架构开发。整体算法流程包括6个阶段，先在 `scripts/run_ail_cycle.py` 中完成整体框架设计，然后再对框架各个部分进行填充和实验。
 
-- [ ] **架构设计与核心模块搭建**
+- [x] **架构设计与核心模块搭建**
     - [x] 完成 `ARCHITECTURE.md` 对 A-IL 架构的详细描述
-    - [ ] 实现 A-IL 主循环脚本 (`scripts/run_ail_cycle.py`) 的基本框架
-    - [ ] 定义核心数据结构 (例如，轨迹日志、高价值状态列表)
+    - [x] 实现 A-IL 主循环脚本 (`scripts/run_ail_cycle.py`) 的基本框架
+    - [x] 定义核心数据结构 (例如，轨迹日志、高价值状态列表)
 - [ ] **数据聚合与模型再训练 (Phase 1, 2, 5, 6)**
     - [ ] 在 `odpc.data.demo` 中增加 `generate_demo` 相关逻辑，支持随机初始化或根据给定的`initial_pose` 生成demo
     - [ ] 确保 `ImitationDataset` 支持数据聚合

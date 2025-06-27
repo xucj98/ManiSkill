@@ -1,0 +1,150 @@
+# A-IL 框架的顶层配置
+
+# A-IL 循环参数
+ail_loop:
+  num_cycles: 5 # A-IL 循环的总次数 (不包括 Cycle 0)
+  rollout_episodes_per_cycle: 100 # 每轮策略部署收集的 episode 数量
+  # 每轮 A-IL 循环中，通过专家收集的靶向性演示数量。此值应与 offline_analysis.num_high_value_states 保持一致。
+  targeted_demos_per_cycle: 200
+
+# 环境配置 (用于 policy_rollout 阶段)
+env:
+  env_id: "PegInsertionSide-v2"
+  obs_mode: "rgb+depth"
+  control_mode: "pd_ee_delta_pose"
+  sim_backend: "cuda" # 或 "physx_cpu"
+  # 其他 env_kwargs，参考 odpc/configs/exps/PegIns_EeDeltaPose.yaml 中的 evaluator.env_configs.ind.env
+  env_kwargs:
+    reward_mode: sparse
+    render_mode: rgb_array
+    human_render_camera_configs:
+      shader_pack: default
+    sensor_configs:
+      shader_pack: default
+    robot_uids: panda
+    camera_mode: fixed
+    max_episode_steps: 300
+
+# 初始演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path=None)
+initial_demo_generation:
+  num_traj: 200 # 初始演示的数量
+  # 其他 motion_planning_args，参考 odpc/configs/demo/PegIns_EeDeltaPose.yaml
+  motion_planning_args:
+    env_id: ${env.env_id}
+    env_kwargs:
+      clearance: 0.005
+      obs_mode: null
+      control_mode: pd_joint_pos
+      render_mode: "rgb_array"
+      sim_backend: "auto"
+      sensor_configs:
+        shader_pack: default
+      human_render_camera_configs:
+        shader_pack: default
+      viewer_camera_configs:
+        shader_pack: default
+    num_traj: ${initial_demo_generation.num_traj}
+    only_count_success: true
+    reward_mode: null
+    vis: false
+    save_video: false
+    num_procs: 20 # 初始演示生成进程数
+    solve_kwargs:
+      pre_insert_aug: 0
+      start_after_grasp: false
+    seed: 0
+
+# 靶向性演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path!=None)
+# 每个高价值状态只生成一个专家轨迹
+targeted_demo_generation:
+  # 此处不再需要 num_demos_per_high_value_state 参数，因为它固定为 1
+  # 其他与靶向性演示生成相关的参数，例如专家交互界面配置、重置环境的容差等
+  pass
+
+# 策略训练配置
+trainer:
+  total_iters: 200010
+  batch_size: 256
+  save_freq: 20000 # 重新添加
+  eval_freq: 20000 # 重新添加
+  log_freq: 1000
+  num_dataload_workers: 8
+  use_amp: true
+  amp_dtype: "float16"
+
+model:
+  _target_: odpc.models.policy.DiffusionUnetImagePolicy
+  obs_horizon: 1
+  pred_horizon: 16
+  output_dim: 7
+  visual_encoder_config:
+    _target_: odpc.models.vision.Resnet18Encoder
+    obs_meta:
+      base_camera:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb
+        depth: sensor_data.base_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 256
+  noise_pred_net_config:
+    _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
+    input_dim: ${model.output_dim}
+    global_cond_dim: 256
+    diffusion_step_embed_dim: 64
+    down_dims: [64, 128, 256]
+    n_groups: 8
+  noise_scheduler_config:
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+    num_train_timesteps: 100
+    beta_schedule: "squaredcos_cap_v2"
+    clip_sample: true
+    prediction_type: "epsilon"
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-3
+  betas: [0.95, 0.999]
+  weight_decay: 1e-6
+
+lr_scheduler:
+  _target_: diffusers.schedulers.scheduling_ddpm.get_scheduler
+  name: cosine
+  num_warmup_steps: 500
+  num_training_steps: ${trainer.total_iters}
+
+ema:
+  _target_: diffusers.training_utils.EMAModel
+  decay: 0.999
+  update_after_step: 5000
+  use_ema_warmup: true
+  inv_gamma: 1.0
+  power: 0.75
+
+# 评估器配置 (用于 train_policy 阶段的评估)
+evaluator:
+  _target_: odpc.evaluation.evaluate.Evaluator
+  # env_configs 和 dataset_configs 将在 train_policy 函数中动态传入或从其他地方引用
+  # 这里可以放置 evaluator 自身的通用配置，例如是否保存视频等
+
+# 离线分析配置 (Phase 4)
+offline_analysis:
+  # 失败定位阈值
+  failure_threshold: 0.1 # 例如，成功率低于此值则视为失败
+  # 不确定性排序方法
+  uncertainty_metric: "ensemble_variance" # 或 "entropy"
+  # 多样性采样参数
+  diversity_sampling_method: "kmeans" # 或 "fps" (farthest point sampling)
+  # 每轮识别的高价值状态数量。此值应与 ail_loop.targeted_demos_per_cycle 保持一致。
+  num_high_value_states: ${ail_loop.targeted_demos_per_cycle}
+
+# 数据集加载配置 (用于 train_policy 阶段的 ODPCDataset)
+dataset_loader:
+  _target_: odpc.data.odpc_dataset.ODPCDataset
+  obs_horizon: 1
+  pred_horizon: 16
+  obs_processor_configs:
+    - _target_: odpc.data.obs_processors.ClampDepthProcessor
+      depth_threshold: 3000
+      clamp_to_zero: true
+    - _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
+  act_processor_configs: []
