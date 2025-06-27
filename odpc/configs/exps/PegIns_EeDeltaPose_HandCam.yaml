@@ -1,0 +1,154 @@
+exp_name: "PegIns_EeDeltaPose_HandCam_HoleSize5_Demo8k"
+seed: 42
+obs_horizon: 1
+act_horizon: 8
+pred_horizon: 16
+
+torch_deterministic: true
+track: true
+wandb_entity: null
+wandb_project_name: "ManiSkill"
+wandb_group: "PegIns_EeDeltaPose_HandCam"
+
+obs_mode: rgb+depth
+control_mode: pd_ee_delta_pose
+
+num_envs: 20
+
+save_dir: runs/${exp_name}
+data_path: demos/PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal8k.rgb+depth.pd_ee_delta_pose.physx_cpu.compressed.h5
+
+trainer:
+  total_iters: 200010
+  batch_size: 256
+  save_freq: 20000
+  eval_freq: 20000
+  log_freq: 1000
+  num_dataload_workers: 12
+  use_amp: true
+  amp_dtype: "float16"
+
+obs_processor_configs:
+  - _target_: odpc.data.obs_processors.ClampDepthProcessor
+    depth_threshold: 3000
+    clamp_to_zero: true
+  - _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
+  - _target_: odpc.data.obs_processors.TcpCropProcessor
+    crop_size: [128, 128]
+    padding_value: 0
+    camera_name: base_camera
+    output_postfix: _crop
+
+act_processor_configs: []
+
+train_dataset:
+  _target_: odpc.data.odpc_dataset.ODPCDataset
+  data_path: ${data_path}
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  num_traj: 1000
+  obs_processor_configs: ${obs_processor_configs}
+  act_processor_configs: ${act_processor_configs}
+
+model:
+  _target_: odpc.models.policy.DiffusionUnetImagePolicy
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  output_dim: 7
+  visual_encoder_config:
+    _target_: odpc.models.vision.Resnet18Encoder
+    obs_meta:
+      base_camera:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb
+        depth: sensor_data.base_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 256
+      base_camera_crop:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb_crop
+        depth: sensor_data.base_camera.depth_crop
+        shape: [1, 4, 128, 128]
+        output_dim: 256
+  noise_pred_net_config:
+    _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
+    input_dim: ${model.output_dim}
+    global_cond_dim: 512
+    diffusion_step_embed_dim: 64
+    down_dims: [64, 128, 256]
+    n_groups: 8
+  noise_scheduler_config:
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+    num_train_timesteps: 100
+    beta_schedule: "squaredcos_cap_v2"
+    clip_sample: true
+    prediction_type: "epsilon"
+
+
+evaluator:
+  _target_: odpc.evaluation.evaluate.Evaluator
+
+  env_configs:
+    ind:
+      env:
+        _target_: odpc.envs.factory.make_eval_envs.make_eval_envs
+        env_id: PegInsertionSide-v2
+        num_envs: ${num_envs}
+        sim_backend: cuda
+        env_kwargs:
+          obs_mode: ${obs_mode}
+          control_mode: ${control_mode}
+          reward_mode: sparse
+          render_mode: rgb_array
+          human_render_camera_configs:
+            shader_pack: default
+          sensor_configs:
+            shader_pack: default
+          robot_uids: panda
+          camera_mode: fixed
+          max_episode_steps: 300
+        other_kwargs:
+          obs_horizon: ${obs_horizon}
+        video_dir: ${save_dir}/videos/ind_render
+      agent:
+        _target_: odpc.models.agent.SimpleAgent
+        num_envs: ${num_envs}
+        act_horizon: ${act_horizon}
+        pred_horizon: ${pred_horizon}
+        video_dir: ${save_dir}/videos/ind_pred
+        obs_processor_configs: ${obs_processor_configs}
+    # ood: todo
+
+  dataset_configs:
+    ind:
+      _target_: odpc.data.odpc_dataset.ODPCDataset
+      data_path: ${data_path}
+      valid: true
+      obs_horizon: ${obs_horizon}
+      pred_horizon: ${pred_horizon}
+      num_traj: 100
+      obs_processor_configs: ${obs_processor_configs}
+      act_processor_configs: ${act_processor_configs}
+    # ood: todo
+
+
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-3
+  betas: [0.95, 0.999]
+  weight_decay: 1e-6
+
+lr_scheduler:
+  _target_: diffusers.optimization.get_scheduler
+  name: cosine
+  num_warmup_steps: 500
+  num_training_steps: ${trainer.total_iters}
+
+ema:
+  _target_: diffusers.training_utils.EMAModel
+  decay: 0.999
+  update_after_step: 5000
+  use_ema_warmup: true
+  inv_gamma: 1.0
+  power: 0.75

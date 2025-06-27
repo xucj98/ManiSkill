@@ -1,10 +1,10 @@
 env_id: "PegInsertionSide-v2"
 obs_mode: "rgb+depth"
 control_mode: "pd_ee_delta_pose"
-num_traj: 20
+num_traj: 8200
 only_count_success: true
-traj_name: "PegIns_EeDeltaPose_HandCam_Demo20"
-num_procs: 4
+traj_name: "PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal8k"
+num_procs: 40
 shader: "default"
 clip: false
 seed: 0
