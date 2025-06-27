@@ -108,7 +108,7 @@ analyzer:
       x_axis:
         label: Clearance of Hole (mm)
         transformed_label: 1 / (CH - 4)
-        ticks: [5.0, 7.0, 10.0, 20.0, 40.0]
+        ticks: [5.0, 6.0, 7.0, 10.0, 20.0, 40.0]
         transform:
           _target_: odpc.evaluation.precision_curse.transforms.InverseShiftedTransform
           shift: 4.0
