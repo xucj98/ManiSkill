@@ -67,7 +67,8 @@ if __name__ == "__main__":
 
     compress_args = argparse.Namespace(
         traj_path=traj_path,
-        jpg_quality=args.jpg_quality
+        jpg_quality=args.jpg_quality,
+        num_procs=cfg.num_procs,
     )
     compressed_traj_path = compress_demo(compress_args)
     
