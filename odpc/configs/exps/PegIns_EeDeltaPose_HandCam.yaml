@@ -33,11 +33,6 @@ obs_processor_configs:
     depth_threshold: 3000
     clamp_to_zero: true
   - _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
-  - _target_: odpc.data.obs_processors.TcpCropProcessor
-    crop_size: [128, 128]
-    padding_value: 0
-    camera_name: base_camera
-    output_postfix: _crop
 
 act_processor_configs: []
 
@@ -46,7 +41,7 @@ train_dataset:
   data_path: ${data_path}
   obs_horizon: ${obs_horizon}
   pred_horizon: ${pred_horizon}
-  num_traj: 1000
+  num_traj: 7800
   obs_processor_configs: ${obs_processor_configs}
   act_processor_configs: ${act_processor_configs}
 
@@ -64,11 +59,11 @@ model:
         depth: sensor_data.base_camera.depth
         shape: [1, 4, 256, 256]
         output_dim: 256
-      base_camera_crop:
+      hand_camera:
         type: rgbd
-        rgb: sensor_data.base_camera.rgb_crop
-        depth: sensor_data.base_camera.depth_crop
-        shape: [1, 4, 128, 128]
+        rgb: sensor_data.hand_camera.rgb
+        depth: sensor_data.hand_camera.depth
+        shape: [1, 4, 256, 256]
         output_dim: 256
   noise_pred_net_config:
     _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
@@ -96,6 +91,7 @@ evaluator:
         num_envs: ${num_envs}
         sim_backend: cuda
         env_kwargs:
+          clearance: 0.005
           obs_mode: ${obs_mode}
           control_mode: ${control_mode}
           reward_mode: sparse
@@ -104,7 +100,7 @@ evaluator:
             shader_pack: default
           sensor_configs:
             shader_pack: default
-          robot_uids: panda
+          robot_uids: panda_peg_insertion
           camera_mode: fixed
           max_episode_steps: 300
         other_kwargs:
