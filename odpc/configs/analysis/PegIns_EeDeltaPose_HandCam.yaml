@@ -1,0 +1,131 @@
+analyzer:
+  _target_: odpc.evaluation.precision_curse.precision_curse_analyzer.PrecisionCurseAnalyzer
+
+  name: PegIns_EeDeltaPose_HoleSize
+  description: 探索Peg Insertion任务中，使用EeDeltaPose控制，给定成功率下，洞口大小与数据量之间的关系
+  save_dir: analysis_outputs/${analyzer.name}
+
+  # 1. 数据读取器配置
+  reader:
+    _target_: odpc.evaluation.precision_curse.wandb_reader.WandbReader
+    entity: null
+    project: ManiSkill
+    # 筛选器 (OR of ANDs)
+    filters:
+      - conditions:
+          - key: group
+            value: PegIns_EeDeltaPose_HandCam
+            op: ==
+          - key: job type
+            value: train
+            op: ==
+
+  # 2. 数据处理器配置
+  processor:
+    _target_: odpc.evaluation.precision_curse.wandb_processor.WandbProcessor
+    # 数据模式定义 (如何从每个运行中提取和转换关键信息)
+    data_schema:
+      num_data:
+        source_type: config
+        path_or_key: train_dataset.num_traj
+        data_type: numeric
+        on_missing: drop_run # drop_run, fill_value, error
+        # fill_value: 0 # 如果 on_missing 是 fill_value
+
+      precision:
+        source_type: config
+        path_or_key: demo_config.motion_planning_args.env_kwargs.clearance
+        data_type: numeric
+        on_missing: drop_run # drop_run, fill_value, error
+        transform: # 更灵活的转换机制
+          _target_: odpc.evaluation.precision_curse.transforms.MultiplyTransform
+          factor: 1000
+
+      metric:
+        source_type: history
+        path_or_key: eval/env_ind/success_once
+        data_type: numeric
+        on_missing: drop_run # drop_run, fill_value, error
+        transform:
+          _target_: odpc.evaluation.precision_curse.transforms.SeriesAggregationTransform
+          method: max # max, min, mean, median, last, first, last_n_mean
+          args: # 例如，如果 method 是 last_n_mean
+            # n: 5
+            pass # max 通常不需要额外参数
+         
+  # 3. 绘图器/分析器配置
+  reporter:
+    _target_: odpc.evaluation.precision_curse.precision_curse_reporter.PrecisionCurseReporter # 具体的绘图/分析逻辑类
+    
+    display_names_map: # 可选：用于图表标签的 field_key -> 显示名 映射
+      num_data: "Number of Trajectories"
+      precision: "Clearance of Hole"
+      metric: "Success Rate"
+
+    # 分析和绘图的具体设置
+    target_metrics: [0.5, 0.7, 0.9]
+
+    report_metric_vs_num_data: # 配置第一组图
+      title: Success Rate vs. Number of Trajectories (by Clearance of Hole) # 图表标题模板，可用占位符
+      grouping_legend_title: Clearance of Hole (mm)
+
+      x_axis:
+        label: Number of Trajectories (N)
+        transformed_label: log(ND)
+        ticks: [200, 500, 1000, 2000, 4000, 8000]
+        transform:
+          _target_: odpc.evaluation.precision_curse.transforms.LogTransform
+          base: 2
+      
+      y_axis:
+        label: Success Rate
+        transformed_label: log(1-SR)
+        ticks: [0.3, 0.5, 0.7, 0.9, 0.95]
+        transform:
+          _target_: odpc.evaluation.precision_curse.transforms.LogOneMinusTransform
+          base: 2
+      
+      plot_elements: # 定义图上画什么
+        - type: scatter # 画原始数据点
+          marker: o
+          size: 30
+          alpha: 0.7
+        - type: linear_regression_fit # 可选，画回归线
+          display_equation: true # 是否在图上显示拟合方程
+          display_r_squared: true # 是否在图上显示回归系数
+      
+    report_num_data_vs_precision: # 配置第二组图
+      title: Number of Trajectories vs. Clearance of Hole (by Target Success Rate)
+      grouping_legend_title: Target Success Rate
+      
+      x_axis:
+        label: Clearance of Hole (mm)
+        transformed_label: 1 / (CH - 4)
+        ticks: [5.0, 6.0, 7.0, 10.0, 20.0, 40.0]
+        transform:
+          _target_: odpc.evaluation.precision_curse.transforms.InverseShiftedTransform
+          shift: 4.0
+
+      y_axis:
+        label: Number of Trajectories (N)
+        transformed_label: log(ND)
+        ticks: [100, 1000, 10000, 100000, 1000000]
+        transform:
+          _target_: odpc.evaluation.precision_curse.transforms.LogTransform
+          base: 2
+
+      plot_elements: # 定义图上画什么
+        - type: scatter # 画原始数据点
+          marker: o
+          size: 30
+          alpha: 0.7
+        - type: linear_regression_fit # 可选，画回归线
+          display_equation: true # 是否在图上显示拟合方程
+          display_r_squared: true # 是否在图上显示回归系数
+      
+    output_options:
+      save_dir: ${analyzer.save_dir}
+      save_plots: true
+      plot_format: png
+      save_processed_data_csv: true # Plotter 可能也需要访问处理后的数据来保存
+   
