@@ -15,7 +15,7 @@ from mani_skill.trajectory.merge_trajectory import merge_trajectories
 from mani_skill.examples.motionplanning.panda.solutions import solvePushCube, solvePickCube, solveStackCube, solvePegInsertionSide, solvePlugCharger, solvePullCubeTool, solveLiftPegUpright, solvePullCube, solveDrawTriangle, solveDrawSVG
 
 import odpc.envs
-from odpc.data.demo.panda_solutions import solvePegInsertionSidev2
+from odpc.data.demo.panda_solutions import solvePegInsertionSidev2, solveStackCuboid
 
 MP_SOLUTIONS = {
     "DrawTriangle-v1": solveDrawTriangle,
@@ -28,7 +28,8 @@ MP_SOLUTIONS = {
     "PullCubeTool-v1": solvePullCubeTool,
     "LiftPegUpright-v1": solveLiftPegUpright,
     "PullCube-v1": solvePullCube,
-    "DrawSVG-v1" : solveDrawSVG
+    "DrawSVG-v1" : solveDrawSVG,
+    "StackCuboid-v1": solveStackCuboid,
 }
 
 def _main(args, proc_id: int = 0, start_seed: int = 0) -> str:

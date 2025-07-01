@@ -1,1 +1,2 @@
 from .peg_insertion_side_v2 import PegInsertionSideV2Env
+from .stack_cuboid import StackCuboidEnv
