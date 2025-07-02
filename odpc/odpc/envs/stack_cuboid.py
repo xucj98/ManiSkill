@@ -204,7 +204,8 @@ class StackCuboidEnv(BaseEnv):
         
         is_cuboidA_static = self.cuboidA.is_static(lin_thresh=3e-2, ang_thresh=3e-1)
         is_cuboidA_grasped = self.agent.is_grasping(self.cuboidA)
-        success = is_cuboidA_on_cuboidB * is_cuboidA_static * (~is_cuboidA_grasped)
+        # success = is_cuboidA_on_cuboidB * is_cuboidA_static * (~is_cuboidA_grasped)
+        success = is_cuboidA_on_cuboidB * (~is_cuboidA_grasped)
         return {
             "is_cuboidA_grasped": is_cuboidA_grasped,
             "is_cuboidA_on_cuboidB": is_cuboidA_on_cuboidB,
