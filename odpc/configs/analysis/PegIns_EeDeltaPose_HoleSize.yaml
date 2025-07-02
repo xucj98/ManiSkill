@@ -55,10 +55,9 @@ analyzer:
         on_missing: drop_run # drop_run, fill_value, error
         transform:
           _target_: odpc.evaluation.precision_curse.transforms.SeriesAggregationTransform
-          method: max # max, min, mean, median, last, first, last_n_mean
-          args: # 例如，如果 method 是 last_n_mean
-            # n: 5
-            pass # max 通常不需要额外参数
+          method: max_n_mean # max, min, mean, median, last, first, last_n_mean, max_n_mean, min_n_mean
+          args:
+            n: 3
          
   # 3. 绘图器/分析器配置
   reporter:
