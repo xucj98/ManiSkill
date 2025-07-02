@@ -17,7 +17,7 @@ class Resnet18Encoder(BaseVisionEncoder):
     def _init_encoders(self):
         encoders = {}
         for name, meta in self.obs_meta.items():
-            if meta["type"] in ["rgb", "rgbd"]:
+            if meta["type"] in ["rgb", "rgbd", "stack_image"]:
                 ic = meta["shape"][-3]
                 oc = meta["output_dim"]
                 encoder = resnet18()

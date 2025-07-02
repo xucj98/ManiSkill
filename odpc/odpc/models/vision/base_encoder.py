@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from einops import rearrange
+from torchvision.transforms.functional import resize
 
 from odpc.utils import utils
 
@@ -32,13 +33,32 @@ class BaseVisionEncoder(nn.Module):
                     raise RuntimeError(f"unable parse metadata")
             elif meta["type"] == "rgb":
                 data = utils.get_nested_value(obs, meta["rgb"])
+            elif meta["type"] == "stack_image":
+                channles = []
+                for c_key in meta["channels"]:
+                    channles.append(utils.get_nested_value(obs, c_key))
+                data = torch.cat(channles, dim=-3)
             
             if data.ndim == 5:
                 b, t, c, h, w = data.shape
+
                 data = rearrange(data, "b t c h w -> (b t) c h w")
+                
+                # 调整图像尺寸
+                _, cd, hd, wd = meta.shape
+                assert c == cd, "channel number mismatch"
+                if h != hd or w != wd:
+                    data = resize(data, [hd, wd])
+                
                 feature = self.encoders[name](data)
                 feature = rearrange(feature, "(b t) d -> b (t d)", b=b)
             else:
+                # 调整图像尺寸
+                _, cd, hd, wd = meta.shape
+                assert c == cd, "channel number mismatch"
+                if h != hd or w != wd:
+                    data = resize(data, [hd, wd])
+
                 feature = self.encoders[name](data)
             
             features.append(feature)

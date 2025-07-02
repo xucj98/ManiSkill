@@ -1,9 +1,9 @@
 env_id: "StackCuboid-v1"
 obs_mode: "rgb+depth"
 control_mode: "pd_ee_delta_pose"
-num_traj: 2000
+num_traj: 4200
 only_count_success: true
-traj_name: "StackCuboid_EeDeltaPose_Demo2k"
+traj_name: "StackCuboid_EeDeltaPose_Size20_DemoVal4k"
 num_procs: 20
 shader: "default"
 clip: false
@@ -12,7 +12,7 @@ seed: 0
 motion_planning_args:
   env_id: ${env_id}
   env_kwargs:
-    cuboid_half_size: 0.02
+    cuboid_half_size: 0.020
     robot_uids: "panda_wristcam"
     obs_mode: null
     control_mode: pd_joint_pos
