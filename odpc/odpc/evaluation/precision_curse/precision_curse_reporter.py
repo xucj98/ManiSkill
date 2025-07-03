@@ -125,7 +125,7 @@ class PrecisionCurseReporter:
                 
             elif el_type == "linear_regression_fit":
                 if regression_results is None:
-                    print(f"  INFO: Not enough data points ({len(plot_x)}) for linear regression in group '{group_name}'.")
+                    print(f"  INFO: Not enough data points ({len(plot_x)}) for linear regression in group '{legend_label}'.")
                     continue
                 else:
                     slope = regression_results["slope"]
