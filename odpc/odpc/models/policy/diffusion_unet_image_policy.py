@@ -2,9 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from typing import Optional
+
 from odpc.utils.utils import instantiate_from_config
 from odpc.models.vision import BaseVisionEncoder
+from odpc.models.state import BaseStateEncoder
 from odpc.models.policy.base_policy import BasePolicy
+
 
 class DiffusionUnetImagePolicy(BasePolicy):
     def __init__(
@@ -12,16 +16,24 @@ class DiffusionUnetImagePolicy(BasePolicy):
             obs_horizon,
             pred_horizon,    
             output_dim,
-            visual_encoder_config,
             noise_pred_net_config,
             noise_scheduler_config,
+            visual_encoder_config=None,
+            state_encoder_config=None,
     ):
         super().__init__(
             obs_horizon=obs_horizon,
             pred_horizon=pred_horizon,
             output_dim=output_dim,
         )
-        self.visual_encoder: BaseVisionEncoder = instantiate_from_config(visual_encoder_config)
+        
+        self.visual_encoder: Optional[BaseVisionEncoder] = None
+        self.state_encoder: Optional[BaseStateEncoder] = None
+        if visual_encoder_config is not None:
+            self.visual_encoder = instantiate_from_config(visual_encoder_config)
+        if state_encoder_config is not None:
+            self.state_encoder = instantiate_from_config(state_encoder_config)
+
         self.noise_pred_net = instantiate_from_config(noise_pred_net_config)
         self.noise_scheduler = instantiate_from_config(noise_scheduler_config)
 
@@ -34,7 +46,12 @@ class DiffusionUnetImagePolicy(BasePolicy):
         device = action.device
 
         # observation as FiLM conditioning
-        obs_cond = self.visual_encoder(obs)  # (B, obs_horizon * obs_dim)
+        conds = []
+        if self.visual_encoder is not None:
+            conds.append(self.visual_encoder(obs))
+        if self.state_encoder is not None:
+            conds.append(self.state_encoder(obs))
+        obs_cond = torch.cat(conds, dim=-1)  # (B, obs_horizon * obs_dim)
 
         # sample noise to add to actions
         noise = torch.randn((B, self.pred_horizon, self.output_dim), device=device)
@@ -69,7 +86,12 @@ class DiffusionUnetImagePolicy(BasePolicy):
 
         # obs_seq['state']: (B, obs_horizon, obs_state_dim)
         with torch.no_grad():
-            obs_cond = self.visual_encoder(obs)  # (B, obs_horizon * obs_dim)
+            conds = []
+            if self.visual_encoder is not None:
+                conds.append(self.visual_encoder(obs))
+            if self.state_encoder is not None:
+                conds.append(self.state_encoder(obs))
+            obs_cond = torch.cat(conds, dim=-1)  # (B, obs_horizon * obs_dim)
 
             # initialize action from Guassian noise
             noisy_action_seq = torch.randn(

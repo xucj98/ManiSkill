@@ -170,5 +170,6 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
             base_pose=self.agent.robot.root.pose.raw_pose,
             cam0_peg_pose=cam0_peg_pose.raw_pose,
             cam0_world_pose=cam0_world_pose.raw_pose,
+            goal_pose=self.goal_pose.raw_pose,
         )
         return obs
