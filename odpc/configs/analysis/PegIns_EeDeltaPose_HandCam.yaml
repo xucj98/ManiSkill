@@ -50,10 +50,16 @@ analyzer:
         data_type: numeric
         on_missing: drop_run # drop_run, fill_value, error
         transform:
-          _target_: odpc.evaluation.precision_curse.transforms.SeriesAggregationTransform
-          method: max_n_mean # max, min, mean, median, last, first, last_n_mean, max_n_mean, min_n_mean
-          args:
-            n: 3
+          _target_: odpc.evaluation.precision_curse.transforms.SequentialTransform
+          transforms:
+            - _target_: odpc.evaluation.precision_curse.transforms.SeriesRemoveOutliersTransform
+              method: max_n
+              args:
+                n: 1
+            - _target_: odpc.evaluation.precision_curse.transforms.SeriesAggregationTransform
+              method: max_n_mean # max, min, mean, median, last, first, last_n_mean, max_n_mean, min_n_mean
+              args:
+                n: 3
          
   # 3. 绘图器/分析器配置
   reporter:
