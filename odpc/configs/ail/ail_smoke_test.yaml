@@ -1,0 +1,178 @@
+# odpc/configs/ail/ail_smoke_test_merged.yaml
+# A-IL 框架冒烟测试的完整配置文件
+# 该配置整合了所有子模块的配置，提供完整的端到端测试流程
+# 使用极小的数据量和计算量，旨在快速验证整个 A-IL 流程的正确性
+
+# ============================================================================
+# 基础信息
+# ============================================================================
+project_name: "odpc_ail_smoke_test"
+exp_name: "ail_smoke_test_run"
+seed: 42
+
+# ============================================================================
+# A-IL 主循环配置
+# ============================================================================
+ail_loop:
+  num_cycles: 2  # A-IL 循环的总次数 (不包括 Cycle 0)
+  rollout_episodes_per_cycle: 2  # 每轮策略部署收集的 episode 数量
+  targeted_demos_per_cycle: 1  # 每轮生成的靶向性演示数量
+
+# ============================================================================
+# 环境配置 (用于 policy_rollout 阶段)
+# ============================================================================
+env:
+  env_id: "PegInsertionSide-v2"
+  obs_mode: "rgbd"
+  control_mode: "pd_ee_delta_pose"
+  sim_backend: "physx_cpu"  # 在冒烟测试中使用CPU以获得更好的兼容性
+  env_kwargs:
+    reward_mode: sparse
+    render_mode: rgb_array
+    max_episode_steps: 50  # 缩短最大步数以加快测试
+
+# ============================================================================
+# 初始演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path=None)
+# ============================================================================
+initial_demo_generation:
+  # 基础参数
+  env_id: "PegInsertionSide-v2"
+  obs_mode: "rgb+depth"
+  control_mode: "pd_ee_delta_pose"
+  num_traj: 2
+  only_count_success: true
+  traj_name: "smoke_test_traj"
+  num_procs: 2
+  shader: "default"
+  clip: false
+  seed: 42
+  
+  # motion_planning_args 配置
+  motion_planning_args:
+    env_id: ${initial_demo_generation.env_id}
+    env_kwargs:
+      clearance: 0.005
+      obs_mode: null
+      control_mode: pd_joint_pos
+      render_mode: "rgb_array"
+      sim_backend: "auto"
+      sensor_configs:
+        shader_pack: ${initial_demo_generation.shader}
+      human_render_camera_configs:
+        shader_pack: ${initial_demo_generation.shader}
+      viewer_camera_configs:
+        shader_pack: ${initial_demo_generation.shader}
+    num_traj: ${initial_demo_generation.num_traj}
+    only_count_success: ${initial_demo_generation.only_count_success}
+    reward_mode: null
+    vis: false
+    save_video: false
+    traj_name: ${initial_demo_generation.traj_name}
+    num_procs: ${initial_demo_generation.num_procs}
+    solve_kwargs:
+      pre_insert_aug: 0
+      start_after_grasp: false
+    seed: ${initial_demo_generation.seed}
+
+# ============================================================================
+# 靶向性演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path!=None)
+# ============================================================================
+targeted_demo_generation:
+  # 每个高价值状态将固定生成一个专家轨迹
+  # 当前阶段，此配置可为空或包含注释
+  pass
+
+# ============================================================================
+# 策略训练配置
+# ============================================================================
+trainer:
+  total_iters: 100  # 冒烟测试使用极小的迭代次数
+  batch_size: 32
+  save_freq: 50
+  eval_freq: 50
+  log_freq: 10
+  num_dataload_workers: 2
+  use_amp: false  # 冒烟测试中关闭混合精度
+  amp_dtype: "float16"
+
+model:
+  _target_: odpc.models.policy.DiffusionUnetImagePolicy
+  obs_horizon: 1
+  pred_horizon: 16
+  output_dim: 7
+  visual_encoder_config:
+    _target_: odpc.models.vision.Resnet18Encoder
+    obs_meta:
+      base_camera:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb
+        depth: sensor_data.base_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 256
+  noise_pred_net_config:
+    _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
+    input_dim: ${model.output_dim}
+    global_cond_dim: 256
+    diffusion_step_embed_dim: 64
+    down_dims: [64, 128, 256]
+    n_groups: 8
+  noise_scheduler_config:
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+    num_train_timesteps: 100
+    beta_schedule: "squaredcos_cap_v2"
+    clip_sample: true
+    prediction_type: "epsilon"
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-3
+  betas: [0.95, 0.999]
+  weight_decay: 1e-6
+
+lr_scheduler:
+  _target_: diffusers.schedulers.scheduling_ddpm.get_scheduler
+  name: cosine
+  num_warmup_steps: 50
+  num_training_steps: ${trainer.total_iters}
+
+ema:
+  _target_: diffusers.training_utils.EMAModel
+  decay: 0.999
+  update_after_step: 50
+  use_ema_warmup: true
+  inv_gamma: 1.0
+  power: 0.75
+
+# ============================================================================
+# 评估器配置 (用于 train_policy 阶段的评估)
+# ============================================================================
+evaluator:
+  _target_: odpc.evaluation.evaluate.Evaluator
+  # env_configs 和 dataset_configs 将在 train_policy 函数中动态传入
+
+# ============================================================================
+# 离线分析配置 (Phase 4)
+# ============================================================================
+offline_analysis:
+  # 每轮要识别的高价值状态数量
+  num_high_value_states: ${ail_loop.targeted_demos_per_cycle}
+  # 失败定位阈值
+  failure_threshold: 0.9
+  # 不确定性排序方法
+  uncertainty_metric: "variance"
+  # 多样性采样参数
+  diversity_sampling_method: "random"
+
+# ============================================================================
+# 数据集加载配置 (用于 train_policy 阶段的 ODPCDataset)
+# ============================================================================
+dataset_loader:
+  _target_: odpc.data.odpc_dataset.ODPCDataset
+  obs_horizon: 1
+  pred_horizon: 16
+  obs_processor_configs:
+    - _target_: odpc.data.obs_processors.ClampDepthProcessor
+      depth_threshold: 3000
+      clamp_to_zero: true
+    - _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
+  act_processor_configs: [] 
