@@ -12,16 +12,14 @@ from odpc.data.demo.replay_trajectory import Args as ReplayTrajectoryArgs
 from odpc.data.demo.compress import main as compress_demo
 
 
-def run_generation_workflow(cfg: DictConfig, record_dir: str, jpg_quality: int = 90) -> str:
+def run_generation_workflow(cfg: DictConfig) -> str:
     """
     运行完整的专家演示生成工作流。
     这个函数封装了从运动规划、控制模式重放、裁剪到压缩的整个流程。
 
     Args:
         cfg: 包含所有步骤所需参数的 OmegaConf 配置对象。
-        record_dir: 用于存放所有产物的根目录。
-        jpg_quality: JPEG 压缩质量。
-
+       
     Returns:
         最终生成的、经过压缩的演示文件的路径。
     """
@@ -40,7 +38,6 @@ def run_generation_workflow(cfg: DictConfig, record_dir: str, jpg_quality: int =
     traj_paths = []
 
     # 1. 运动规划生成基础轨迹
-    cfg.motion_planning_args.record_dir = record_dir
     traj_path = motion_planning(cfg.motion_planning_args)
     traj_paths.append(traj_path)
 
@@ -78,7 +75,7 @@ def run_generation_workflow(cfg: DictConfig, record_dir: str, jpg_quality: int =
     # 5. 压缩最终轨迹
     compress_args = argparse.Namespace(
         traj_path=final_traj_path,
-        jpg_quality=jpg_quality,
+        jpg_quality=cfg.jpg_quality,
         num_procs=cfg.num_procs,
     )
     compressed_traj_path = compress_demo(compress_args)

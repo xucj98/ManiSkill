@@ -1,39 +1,20 @@
-env_id: "StackCuboid-v1"
-obs_mode: "rgb+depth"
-control_mode: "pd_ee_delta_pose"
-num_traj: 4200
-only_count_success: true
+defaults:
+  - base
+  - _self_
+
 traj_name: "StackCuboid_EeDeltaPose_Size20_DemoVal4k"
+num_traj: 420
 num_procs: 20
 shader: "default"
-clip: false
-seed: 0
 
 motion_planning_args:
-  env_id: ${env_id}
+  env_id: "StackCuboid-v1"
   env_kwargs:
     cuboid_half_size: 0.020
     robot_uids: "panda_wristcam"
-    obs_mode: null
-    control_mode: pd_joint_pos
-    render_mode: "rgb_array"
-    sim_backend: "auto"
     sensor_configs:
-      shader_pack: ${shader}
       hand_camera:
         width: 256
         height: 256
-    human_render_camera_configs:
-      shader_pack: ${shader}
-    viewer_camera_configs:
-      shader_pack: ${shader}
-  num_traj: ${num_traj}
-  only_count_success: ${only_count_success}
-  reward_mode: null
-  vis: false
-  save_video: false
-  traj_name: ${traj_name}
-  num_procs: ${num_procs}
   solve_kwargs:
     start_after_grasp: false
-  seed: ${seed}

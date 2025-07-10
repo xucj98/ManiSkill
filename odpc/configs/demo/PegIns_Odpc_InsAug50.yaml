@@ -1,36 +1,16 @@
-env_id: "PegInsertionSide-v2"
-obs_mode: "state_dict+rgb+depth"
-control_mode: "pd_ee_pose"
-num_traj: 8000
-only_count_success: true
-traj_name: "PegIns_Odpc_InsAug50_Demo8k"
+defaults:
+  - base
+  - _self_
+
+traj_name: "PegIns_Odpc_InsAug50_DemoVal8k"
+num_traj: 8200
 num_procs: 20
-shader: "default"
-clip: true
-seed: 0
 
 motion_planning_args:
-  env_id: ${env_id}
+  env_id: "PegInsertionSide-v2"
   env_kwargs:
     clearance: 0.005
-    obs_mode: null
-    control_mode: pd_joint_pos
-    render_mode: "rgb_array"
-    sim_backend: "auto"
-    sensor_configs:
-      shader_pack: ${shader}
-    human_render_camera_configs:
-      shader_pack: ${shader}
-    viewer_camera_configs:
-      shader_pack: ${shader}
-  num_traj: ${num_traj}
-  only_count_success: ${only_count_success}
-  reward_mode: null
-  vis: false
-  save_video: false
-  traj_name: ${traj_name}
-  num_procs: ${num_procs}
+    robot_uids: "panda"
   solve_kwargs:
     pre_insert_aug: 0.5
     start_after_grasp: true
-  seed: ${seed}

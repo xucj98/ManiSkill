@@ -11,3 +11,7 @@ motion_planning_args:
   env_kwargs:
     clearance: 0.005
     robot_uids: "panda"
+  solve_kwargs:
+    pre_insert_aug: 0
+    start_after_grasp: false
+  

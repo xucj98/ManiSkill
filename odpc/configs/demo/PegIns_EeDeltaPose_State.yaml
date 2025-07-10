@@ -1,36 +1,17 @@
-env_id: "PegInsertionSide-v2"
-obs_mode: "rgb+depth+state_dict"
-control_mode: "pd_ee_delta_pose"
-num_traj: 200
-only_count_success: true
+defaults:
+  - base
+  - _self_
+
 traj_name: "PegIns_EeDeltaPose_State_Demo200"
-num_procs: 20
-shader: "default"
-clip: false
-seed: 0
+num_traj: 20
+num_procs: 10
+obs_mode: "rgb+depth+state_dict"
 
 motion_planning_args:
-  env_id: ${env_id}
+  env_id: "PegInsertionSide-v2"
   env_kwargs:
     clearance: 0.005
-    obs_mode: null
-    control_mode: pd_joint_pos
-    render_mode: "rgb_array"
-    sim_backend: "auto"
-    sensor_configs:
-      shader_pack: ${shader}
-    human_render_camera_configs:
-      shader_pack: ${shader}
-    viewer_camera_configs:
-      shader_pack: ${shader}
-  num_traj: ${num_traj}
-  only_count_success: ${only_count_success}
-  reward_mode: null
-  vis: false
-  save_video: false
-  traj_name: ${traj_name}
-  num_procs: ${num_procs}
+    robot_uids: "panda"
   solve_kwargs:
     pre_insert_aug: 0
     start_after_grasp: false
-  seed: ${seed}
