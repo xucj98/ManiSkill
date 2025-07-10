@@ -4,25 +4,69 @@ import torch
 import numpy as np
 import importlib
 from typing import Union
-from omegaconf import DictConfig, OmegaConf
 from datetime import datetime
+import re
+
+from omegaconf import DictConfig, OmegaConf
+
+
+def prefix_interpolations(cfg: DictConfig, prefix: str) -> dict:
+    """
+    递归地遍历一个 OmegaConf 配置对象，并为所有"绝对路径"内插表达式的键添加指定的前缀。
+
+    当需要将一个原本作为"根配置"编写的 YAML 文件，合并到另一个配置文件的某个子节点下时，
+    此函数可以确保其内部的内插表达式能够相对于新的根正确地解析。
+
+    转换规则:
+    - `${key}` 会被转换为 `${prefix.key}`
+    - `${.key}` (相对路径引用) 会保持不变，因为它的作用域是局部的。
+    - `${/key}` (从配置树根引用的绝对路径) 目前不支持，此函数会忽略它。
+    - 包含解析器（如 `${oc.env:VAR}`）的内插表达式会被忽略，保持原样。
+
+    Args:
+        cfg (DictConfig): 需要被处理的 OmegaConf 配置对象。
+        prefix (str): 要添加到内插键前面的字符串前缀。
+
+    Returns:
+        dict: 一个新原始的 Python 字典，其中内插路径已被重写。
+    """
+    # By converting to a primitive container (dict) first, we prevent any automatic resolution.
+    raw_dict = OmegaConf.to_container(cfg, resolve=False)
+
+    def _process(val):
+        if isinstance(val, dict):
+            return {k: _process(v) for k, v in val.items()}
+        elif isinstance(val, list):
+            return [_process(v) for v in val]
+        elif isinstance(val, str):
+            # Regex to find interpolations like ${key} but not ${.key} or ${/key} or ${resolver:key}
+            def repl(m):
+                key = m.group(1)
+                if key.startswith('.') or key.startswith('/') or ':' in key:
+                    return m.group(0) # Keep as is
+                return '${' + prefix + '.' + key + '}'
+            return re.sub(r'\$\{([^}]+)\}', repl, val)
+        else:
+            return val
+    
+    return _process(raw_dict)
 
 
 def parse_config_expr(expr: str):
     """
-    解析配置表达式：
+    使用正则表达式解析配置表达式，支持多个表达式。
     - 时间表达式: "[now:'%Y%m%d_%H%M%S']"
-    """    
-    while expr.find("[") != -1 and expr.find("]") != -1:
-        start = expr.find("[")
-        end = expr.find("]")
-        subexpr = expr[start + 1 : end]
+    """
+    def repl(m):
+        subexpr = m.group(1)
         if subexpr.startswith("now:"):
-            subexpr = datetime.now().strftime(subexpr[4:])
+            format_str = subexpr[4:].strip("'\"")
+            return datetime.now().strftime(format_str)
         else:
-            raise ValueError(f"Invalid expression: {expr}")
-        expr = expr[:start] + subexpr + expr[end+1:]
-    return expr
+            raise ValueError(f"Invalid expression type in '{m.group(0)}'")
+
+    # Use re.sub to find and replace all occurrences of [...]
+    return re.sub(r'\[([^\]]+)\]', repl, expr)
 
 
 def load_config_with_defaults(config_path: str):
@@ -52,9 +96,10 @@ def load_config_with_defaults(config_path: str):
                 raise ValueError(f"Default config not found: {default}")
             if not os.path.exists(os.path.join(cur_dir, key, value + ".yaml")):
                 raise ValueError(f"Default config not found: {default}")
-            cfg = OmegaConf.create({})
-            cfg[key] = load_config_with_defaults(os.path.join(cur_dir, key, value + ".yaml"))
-            merged_config = OmegaConf.merge(merged_config, cfg)
+            
+            cfg = load_config_with_defaults(os.path.join(cur_dir, key, value + ".yaml"))
+            prefixed_cfg_dict = prefix_interpolations(cfg, key)
+            merged_config = OmegaConf.merge(merged_config, OmegaConf.create({key: prefixed_cfg_dict}))
 
         else:
             raise ValueError(f"Invalid default config: {default}")
