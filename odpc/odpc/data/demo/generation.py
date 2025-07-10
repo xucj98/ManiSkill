@@ -3,6 +3,7 @@ import os
 import argparse
 import multiprocessing as mp
 from omegaconf import OmegaConf, DictConfig
+import warnings
 
 from odpc.data.demo.motionplanning import main as motion_planning
 from odpc.data.demo.clip_demo import main as clip_demo
@@ -24,7 +25,17 @@ def run_generation_workflow(cfg: DictConfig, record_dir: str, jpg_quality: int =
     Returns:
         最终生成的、经过压缩的演示文件的路径。
     """
-    mp.set_start_method("spawn", force=True) # 强制设置，避免上下文问题
+    # 避免在子模块中重复设置，在工作流开始时统一设置一次
+    # [fix]: 'spawn' is essential for CUDA + multiprocessing, but `force=True` can mask issues.
+    # Set it once at the entry point of the application.
+    try:
+        mp.set_start_method("spawn")
+    except RuntimeError:
+        # 在某些情况下（例如，如果已在另一个地方设置），再次设置会引发 RuntimeError。
+        # 如果已经设置，我们可以安全地忽略这个错误。
+        current_method = mp.get_start_method(allow_none=True)
+        if current_method != "spawn":
+            warnings.warn(f"multiprocessing start method is already set to '{current_method}', not 'spawn'. This might cause issues with CUDA.")
     
     traj_paths = []
 

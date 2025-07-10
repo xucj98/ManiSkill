@@ -573,7 +573,6 @@ def main(args: Args):
         env_kwargs["num_envs"] = 1
         ori_env_kwargs["num_envs"] = 1
         if args.num_envs > 1:
-            pool = mp.Pool(args.num_envs)
             proc_args = [
                 (
                     copy.deepcopy(args),
@@ -587,11 +586,12 @@ def main(args: Args):
                 )
                 for i in range(args.num_envs)
             ]
-            # res = pool.starmap(_main, proc_args)
-            res = list(tqdm(pool.imap(_main_helper, proc_args), total=args.count))
+            with mp.Pool(args.num_envs) as pool:
+                res = list(tqdm(pool.imap(_main_helper, proc_args), total=args.count, desc="Replaying trajectories"))
+            
             replay_results_list = [x[1] for x in res]
             trajectory_paths = [x[0] for x in res]
-            pool.close()
+
             if args.save_traj:
                 # A hack to find the path
                 output_path = trajectory_paths[0][: -len("0.h5")] + "h5"

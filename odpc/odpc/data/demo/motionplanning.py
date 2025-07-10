@@ -133,10 +133,12 @@ def main(args):
             raise ValueError("Number of trajectories should be greater than or equal to number of processes")
         args.num_traj = args.num_traj // args.num_procs
         seeds = [*range(args.seed, args.seed + args.num_procs * args.num_traj * 10, args.num_traj * 10)]
-        pool = mp.Pool(args.num_procs)
+        
         proc_args = [(deepcopy(args), i, seeds[i]) for i in range(args.num_procs)]
-        res = pool.starmap(_main, proc_args)
-        pool.close()
+        
+        with mp.Pool(args.num_procs) as pool:
+            res = pool.starmap(_main, proc_args)
+
         # Merge trajectory files
         output_path = res[0][: -len("0.h5")] + "h5"
         merge_trajectories(output_path, res)
