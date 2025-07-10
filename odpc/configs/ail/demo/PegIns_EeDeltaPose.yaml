@@ -1,0 +1,13 @@
+defaults:
+  - base
+  - _self_
+
+traj_name: "PegIns_EeDeltaPose_DemoVal1k"
+num_traj: 1200
+num_procs: 20
+
+motion_planning_args:
+  env_id: "PegInsertionSide-v2"
+  env_kwargs:
+    clearance: 0.005
+    robot_uids: "panda"

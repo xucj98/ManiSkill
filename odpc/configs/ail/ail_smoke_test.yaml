@@ -3,76 +3,35 @@
 # 该配置整合了所有子模块的配置，提供完整的端到端测试流程
 # 使用极小的数据量和计算量，旨在快速验证整个 A-IL 流程的正确性
 
+defaults:
+  - demo: PegIns_EeDeltaPose
+  - _self_
+
 # ============================================================================
 # 基础信息
 # ============================================================================
-project_name: "odpc_ail_smoke_test"
-exp_name: "ail_smoke_test_run"
+project_name: "ail_smoke_test"
+num_procs: 2
 seed: 42
+output_dir: runs/${project_name}_[now:%Y%m%d_%H%M%S]
 
 # ============================================================================
 # A-IL 主循环配置
 # ============================================================================
 ail_loop:
   num_cycles: 2  # A-IL 循环的总次数 (不包括 Cycle 0)
-  rollout_episodes_per_cycle: 2  # 每轮策略部署收集的 episode 数量
-  targeted_demos_per_cycle: 1  # 每轮生成的靶向性演示数量
+  rollout_episodes_per_cycle: 10  # 每轮策略部署收集的 episode 数量
+  targeted_demos_per_cycle: 10  # 每轮生成的靶向性演示数量
 
-# ============================================================================
-# 环境配置 (用于 policy_rollout 阶段)
-# ============================================================================
-env:
-  env_id: "PegInsertionSide-v2"
-  obs_mode: "rgbd"
-  control_mode: "pd_ee_delta_pose"
-  sim_backend: "physx_cpu"  # 在冒烟测试中使用CPU以获得更好的兼容性
-  env_kwargs:
-    reward_mode: sparse
-    render_mode: rgb_array
-    max_episode_steps: 50  # 缩短最大步数以加快测试
 
 # ============================================================================
 # 初始演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path=None)
 # ============================================================================
-initial_demo_generation:
-  # 基础参数
-  env_id: "PegInsertionSide-v2"
-  obs_mode: "rgb+depth"
-  control_mode: "pd_ee_delta_pose"
-  num_traj: 2
-  only_count_success: true
+demo:
+  num_traj: ${..ail_loop.targeted_demos_per_cycle}
   traj_name: "smoke_test_traj"
-  num_procs: 2
-  shader: "default"
-  clip: false
-  seed: 42
-  
-  # motion_planning_args 配置
-  motion_planning_args:
-    env_id: ${initial_demo_generation.env_id}
-    env_kwargs:
-      clearance: 0.005
-      obs_mode: null
-      control_mode: pd_joint_pos
-      render_mode: "rgb_array"
-      sim_backend: "auto"
-      sensor_configs:
-        shader_pack: ${initial_demo_generation.shader}
-      human_render_camera_configs:
-        shader_pack: ${initial_demo_generation.shader}
-      viewer_camera_configs:
-        shader_pack: ${initial_demo_generation.shader}
-    num_traj: ${initial_demo_generation.num_traj}
-    only_count_success: ${initial_demo_generation.only_count_success}
-    reward_mode: null
-    vis: false
-    save_video: false
-    traj_name: ${initial_demo_generation.traj_name}
-    num_procs: ${initial_demo_generation.num_procs}
-    solve_kwargs:
-      pre_insert_aug: 0
-      start_after_grasp: false
-    seed: ${initial_demo_generation.seed}
+  num_procs: ${..num_procs}
+  seed: ${..seed}
 
 # ============================================================================
 # 靶向性演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path!=None)

@@ -6,3 +6,4 @@ diffusers
 tensorboard
 wandb
 mani_skill
+hydra-core

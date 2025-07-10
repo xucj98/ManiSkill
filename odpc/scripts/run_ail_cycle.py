@@ -17,7 +17,7 @@ import pickle
 from omegaconf import DictConfig, OmegaConf
 
 from odpc.data.demo.generation import run_generation_workflow
-
+from odpc.utils.utils import load_config_with_defaults, parse_config_expr
 # 在注释中定义核心数据结构的格式，以保持清晰。
 # 后续这些将被正式定义为类或 TypedDict。
 
@@ -85,7 +85,7 @@ def generate_expert_demos(config: DictConfig, output_dir: pathlib.Path, initial_
     """
     if initial_states_path is None:
         logging.info("阶段 1: 正在生成初始专家演示...")
-        demo_config = config.initial_demo_generation
+        demo_config = config.demo
         # 注意：这里的 jpg_quality 是硬编码的，未来可以加入到配置中
         generated_path_str = run_generation_workflow(cfg=demo_config, record_dir=str(output_dir), jpg_quality=90)
         
@@ -182,15 +182,13 @@ def offline_analysis(config: DictConfig, cycle_dir: pathlib.Path, rollout_log_pa
     return high_value_states_path
 
 
-def main(args):
+def main(args, cfg):
     """运行 A-IL 循环的主函数。"""
     # --- 设置基础目录和日志 ---
-    base_dir = pathlib.Path(args.output_dir)
+    cfg.output_dir = parse_config_expr(cfg.output_dir)
+    base_dir = pathlib.Path(cfg.output_dir)
     base_dir.mkdir(parents=True, exist_ok=True)
     setup_logging(base_dir)
-
-    # 加载指定的配置文件
-    config = OmegaConf.load(args.config)
 
     # --- 第 0 轮: 初始化 ---
     cycle_0_dir = base_dir / "cycle_0"
@@ -201,16 +199,16 @@ def main(args):
     logging.info("=" * 50)
 
     # 阶段 1: 生成初始专家演示
-    initial_dataset_path = generate_expert_demos(config, cycle_0_dir, initial_states_path=None)
+    initial_dataset_path = generate_expert_demos(cfg, cycle_0_dir, initial_states_path=None)
     
     # 阶段 2: 初始模型训练
-    policy_ckpt_path = train_policy(config, [initial_dataset_path], cycle_0_dir)
+    policy_ckpt_path = train_policy(cfg, [initial_dataset_path], cycle_0_dir)
 
     # 聚合后的数据集路径列表
     aggregated_dataset_paths = [initial_dataset_path]
 
     # --- A-IL 主循环 ---
-    for i in range(1, config.ail_loop.num_cycles + 1):
+    for i in range(1, cfg.ail_loop.num_cycles + 1):
         cycle_dir = base_dir / f"cycle_{i}"
         cycle_dir.mkdir(exist_ok=True)
 
@@ -219,17 +217,17 @@ def main(args):
         logging.info("=" * 50)
 
         # 阶段 3: 策略部署
-        rollout_log_path = policy_rollout(config, cycle_dir, policy_ckpt_path)
+        rollout_log_path = policy_rollout(cfg, cycle_dir, policy_ckpt_path)
 
         # 阶段 4: 离线分析
-        high_value_states_path = offline_analysis(config, cycle_dir, rollout_log_path)
+        high_value_states_path = offline_analysis(cfg, cycle_dir, rollout_log_path)
 
         # 阶段 5: 靶向性演示
-        targeted_demos_path = generate_expert_demos(config, cycle_dir, initial_states_path=high_value_states_path)
+        targeted_demos_path = generate_expert_demos(cfg, cycle_dir, initial_states_path=high_value_states_path)
 
         # 阶段 6: 聚合与再训练
         aggregated_dataset_paths.append(targeted_demos_path) # 直接追加
-        policy_ckpt_path = train_policy(config, aggregated_dataset_paths, cycle_dir)
+        policy_ckpt_path = train_policy(cfg, aggregated_dataset_paths, cycle_dir)
 
         logging.info(f"已完成 A-IL 第 {i} 轮。当前策略: {policy_ckpt_path}")
 
@@ -238,12 +236,17 @@ def main(args):
     logging.info("=" * 50)
 
 
-if __name__ == "__main__":
+def get_args():
     parser = argparse.ArgumentParser(description="运行主动模仿学习 (A-IL) 循环。")
-    parser.add_argument("--config", type=str, default="configs/ail/ail_smoke_test.yaml",
-                        help="实验配置文件的路径。")
-    parser.add_argument("--output_dir", type=str, default="runs/ail_experiment",
-                        help="用于保存所有产物的目录。")
+    parser.add_argument("--config", type=str, default="configs/ail/ail_smoke_test.yaml")
+    args, unknown = parser.parse_known_args()
+    
+    cfg = load_config_with_defaults(args.config)
+    cli = OmegaConf.from_dotlist(unknown)
+    cfg = OmegaConf.merge(cfg, cli)
 
-    args = parser.parse_args()
-    main(args)
+    return args, cfg
+
+if __name__ == "__main__":
+    args, cfg = get_args()
+    main(args, cfg)

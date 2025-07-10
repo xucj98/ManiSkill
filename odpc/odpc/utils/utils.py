@@ -1,9 +1,65 @@
+import os
 import h5py
 import torch
 import numpy as np
 import importlib
 from typing import Union
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
+from datetime import datetime
+
+
+def parse_config_expr(expr: str):
+    """
+    解析配置表达式：
+    - 时间表达式: "[now:'%Y%m%d_%H%M%S']"
+    """    
+    while expr.find("[") != -1 and expr.find("]") != -1:
+        start = expr.find("[")
+        end = expr.find("]")
+        subexpr = expr[start + 1 : end]
+        if subexpr.startswith("now:"):
+            subexpr = datetime.now().strftime(subexpr[4:])
+        else:
+            raise ValueError(f"Invalid expression: {expr}")
+        expr = expr[:start] + subexpr + expr[end+1:]
+    return expr
+
+
+def load_config_with_defaults(config_path: str):
+    raw_config = OmegaConf.load(config_path)
+    
+    if "defaults" not in raw_config:
+        return raw_config
+
+    merged_config = OmegaConf.create({})
+    dirname = os.path.dirname(config_path)
+    defaults = raw_config.pop("defaults")
+
+    for default in defaults:
+        if isinstance(default, str):
+            if default == "_self_":
+                merged_config = OmegaConf.merge(merged_config, raw_config)
+            else:
+                cfg = load_config_with_defaults(os.path.join(dirname, default + ".yaml"))
+                merged_config = OmegaConf.merge(merged_config, cfg)
+
+        elif isinstance(default, DictConfig):
+            key, value = default.popitem()
+            cur_dir = dirname 
+            while not os.path.exists(os.path.join(cur_dir, key)) and cur_dir != "/":
+                cur_dir = os.path.dirname(cur_dir)
+            if cur_dir == "/":
+                raise ValueError(f"Default config not found: {default}")
+            if not os.path.exists(os.path.join(cur_dir, key, value + ".yaml")):
+                raise ValueError(f"Default config not found: {default}")
+            cfg = OmegaConf.create({})
+            cfg[key] = load_config_with_defaults(os.path.join(cur_dir, key, value + ".yaml"))
+            merged_config = OmegaConf.merge(merged_config, cfg)
+
+        else:
+            raise ValueError(f"Invalid default config: {default}")
+
+    return merged_config
 
 
 def instantiate_from_config(config: DictConfig, **override_kwargs):
