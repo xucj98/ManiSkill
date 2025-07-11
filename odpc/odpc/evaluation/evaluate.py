@@ -107,7 +107,16 @@ def evaluate_on_dataset(
 
 
 class Evaluator:
-    def __init__(self, model: BasePolicy, env_configs: DictConfig, dataset_configs: DictConfig):
+    def __init__(
+            self, 
+            num_eval_episodes: int,
+
+            model: BasePolicy, 
+            env_configs: DictConfig, 
+            dataset_configs: DictConfig
+        ):
+        self.num_eval_episodes = num_eval_episodes  
+
         self.model = model
         self.env_configs = env_configs
         self.dataset_configs = dataset_configs
@@ -122,7 +131,7 @@ class Evaluator:
                 self.datasets[dataset_name] = instantiate_from_config(dataset_config)
                 
              
-    def evaluate(self, num_episodes: int = 100, batch_size: int = 256):
+    def evaluate(self, batch_size: int = 256):
         """在环境和数据集上进行评估
         
         Args:
@@ -150,7 +159,7 @@ class Evaluator:
                 ).eval().to(self.device)
 
                 env_metrics = evaluate_on_env(
-                    num_episodes, agent, env, 
+                    self.num_eval_episodes, agent, env, 
                     self.device, env_config.env.sim_backend
                 )
                 metrics[f"env_{env_name}"] = env_metrics
