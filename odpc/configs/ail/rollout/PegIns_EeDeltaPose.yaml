@@ -1,0 +1,16 @@
+defaults:
+  - base
+  - _self_
+
+exp_name: "PegIns_EeDeltaPose_Rollout"
+
+track: false
+wandb_group: "PegIns_EeDeltaPose"
+
+evaluator:
+  env_configs:
+    ind:
+      env:
+        env_kwargs:
+          clearance: 0.005
+       

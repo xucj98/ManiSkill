@@ -95,3 +95,76 @@ def make_eval_envs(
             )
         env = ManiSkillVectorEnv(env, ignore_terminations=True, record_metrics=True)
     return env
+
+def make_rollout_envs(
+    env_id,
+    num_envs: int,
+    sim_backend: str,
+    env_kwargs: dict,
+    other_kwargs: dict,
+    output_dir: str,
+    traj_name: str,
+):
+    if sim_backend == "physx_cpu":
+
+        raise NotImplementedError("暂时不支持在rollout的时候使用 CPU 后端。需要实现轨迹合并。")
+        def cpu_make_env(
+            env_id, seed, env_kwargs=dict(), other_kwargs=dict()
+        ):
+            def thunk():
+                env = gym.make(env_id, reconfiguration_freq=1, **env_kwargs)
+                env = FrameStack(env, num_stack=other_kwargs["obs_horizon"])
+                env = CPUGymWrapper(env, ignore_terminations=True, record_metrics=True)
+                env = RecordEpisode(
+                    env,
+                    output_dir=output_dir,
+                    save_trajectory=True,
+                    trajectory_name=traj_name + f".{seed}",
+                    info_on_video=True,
+                    source_type="diffusion_policy",
+                    source_desc="diffusion_policy evaluation rollout",
+                )
+                env.action_space.seed(seed)
+                env.observation_space.seed(seed)
+                return env
+
+            return thunk
+
+        vector_cls = (
+            gym.vector.SyncVectorEnv
+            if num_envs == 1
+            else lambda x: gym.vector.AsyncVectorEnv(x, context="forkserver")
+        )
+        env = vector_cls(
+            [
+                cpu_make_env(
+                    env_id,
+                    seed,
+                    env_kwargs,
+                    other_kwargs,
+                )
+                for seed in range(num_envs)
+            ]
+        )
+    else:
+        env = gym.make(
+            env_id,
+            num_envs=num_envs,
+            sim_backend=sim_backend,
+            reconfiguration_freq=1,
+            **env_kwargs
+        )
+        max_episode_steps = gym_utils.find_max_episode_steps_value(env)
+        env = FrameStack(env, num_stack=other_kwargs["obs_horizon"])
+        env = RecordEpisode(
+            env,
+            output_dir=output_dir,
+            save_trajectory=True,
+            trajectory_name=traj_name,
+            save_video=True,
+            source_type="diffusion_policy",
+            source_desc="diffusion_policy evaluation rollout",
+            max_steps_per_video=max_episode_steps,
+        )
+        env = ManiSkillVectorEnv(env, ignore_terminations=True, record_metrics=True)
+    return env

@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
-from typing import Dict
+from typing import Dict, Optional
 
 import gymnasium as gym
 from mani_skill.utils import common
@@ -112,8 +112,8 @@ class Evaluator:
             num_eval_episodes: int,
 
             model: BasePolicy, 
-            env_configs: DictConfig, 
-            dataset_configs: DictConfig
+            env_configs: Optional[DictConfig] = None, 
+            dataset_configs: Optional[DictConfig] = None,
         ):
         self.num_eval_episodes = num_eval_episodes  
 
@@ -148,14 +148,11 @@ class Evaluator:
                     env_config.env,
                     env_kwargs=env_kwargs,
                     other_kwargs=other_kwargs,
-                    # wrappers=[FlattenRGBDObservationWrapper],
-                    video_dir=env_config.env.video_dir,
                 )
           
                 agent: BaseAgent = instantiate_from_config(
                     env_config.agent,
                     model=self.model,
-                    video_dir=env_config.agent.video_dir,
                 ).eval().to(self.device)
 
                 env_metrics = evaluate_on_env(

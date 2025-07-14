@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 import odpc.envs
 from odpc.data.data_conversion import DataConversion
 from odpc.models.policy import DiffusionUnetImagePolicy
-from odpc.utils.utils import instantiate_from_config
+from odpc.utils.utils import instantiate_from_config, load_config_with_defaults
 from odpc.evaluation.evaluate import Evaluator
 
 
@@ -25,7 +25,7 @@ def get_args():
     parser.add_argument("--batch-size", type=int, default=256)
     args, unknown = parser.parse_known_args()
 
-    cfg = OmegaConf.load(args.config)
+    cfg = load_config_with_defaults(args.config)
     cli = OmegaConf.from_dotlist(unknown)
     cfg = OmegaConf.merge(cfg, cli)
 
@@ -94,7 +94,7 @@ if __name__ == "__main__":
             model.load_state_dict(ckpt["model"])
 
         # 进行评估
-        metrics = evaluator.evaluate(args.num_eval_episodes, args.batch_size)
+        metrics = evaluator.evaluate(args.batch_size)
 
         # 记录评估结果
         for k, v in metrics.items():

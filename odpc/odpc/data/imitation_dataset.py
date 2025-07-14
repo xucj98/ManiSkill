@@ -51,7 +51,7 @@ class ImitationDataset(Dataset):
             rng.shuffle(self.traj_info)
             self.traj_info = self.traj_info[:num_traj] if not valid else self.traj_info[-num_traj:]
 
-        pbar = tqdm(total=len(keys), desc="Prepare dataset.")
+        pbar = tqdm(total=len(self.traj_info), desc="Prepare dataset.")
 
         for traj_idx in range(len(self.traj_info)):
             dataset_id, traj_key, traj_len = self.traj_info[traj_idx]

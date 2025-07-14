@@ -14,11 +14,11 @@ from typing import Dict, Any, List, Optional
 
 import h5py
 import numpy as np
-import pickle
 from omegaconf import DictConfig, OmegaConf
 
 from odpc.data.demo.generation import run_generation_workflow
 from odpc.training.train import train
+from odpc.evaluation.rollout import rollout
 
 from odpc.utils.utils import load_config_with_defaults, parse_config_expr
 
@@ -119,7 +119,7 @@ def train_policy(config: DictConfig, dataset_paths: List[pathlib.Path], output_d
     return model_ckpt_path
 
 
-def policy_rollout(config: DictConfig, cycle_dir: pathlib.Path, policy_ckpt_path: pathlib.Path) -> pathlib.Path:
+def policy_rollout(config: DictConfig, output_dir: pathlib.Path, policy_ckpt_path: pathlib.Path) -> pathlib.Path:
     """
     阶段 3: 在环境中部署当前策略以收集轨迹。
 
@@ -132,16 +132,13 @@ def policy_rollout(config: DictConfig, cycle_dir: pathlib.Path, policy_ckpt_path
         收集到的轨迹日志文件的路径 (TrajectoryLog 格式)。
     """
     logging.info(f"阶段 3: 正在部署策略: {policy_ckpt_path}")
-    rollout_log_path = cycle_dir / "rollout_log.h5"
 
-    # TODO: 实现加载策略与智能体。
-    # TODO: 通过一个环境工厂函数来创建并包装环境，确保环境被 `AILRecordEpisode` 包装器正确应用，
-    # 并配置好轨迹保存路径和文件名。
-    # TODO: 调用 `odpc.odpc.evaluation.evaluate.evaluate_on_env` 函数来执行策略部署。
-    # TODO: 策略部署的起始状态将采用随机初始化。
-    rollout_log_path.touch()
+    rollout_config = config.rollout
+    rollout_config.save_dir = str(output_dir)
 
-    logging.info(f"部署日志已保存至: {rollout_log_path}")
+    rollout_log_path = rollout(rollout_config, policy_ckpt_path)
+    
+    logging.info(f"部署结果保存至: {rollout_log_path}")
     return rollout_log_path
 
 
@@ -215,7 +212,7 @@ def main(args, cfg):
         logging.info("=" * 50)
 
         # 阶段 3: 策略部署
-        rollout_log_path = policy_rollout(cfg, cycle_dir, policy_ckpt_path)
+        rollout_log_path = policy_rollout(cfg, cycle_dir / "rollout", policy_ckpt_path)
 
         # 阶段 4: 离线分析
         high_value_states_path = offline_analysis(cfg, cycle_dir, rollout_log_path)

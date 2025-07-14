@@ -6,6 +6,7 @@
 defaults:
   - demo: PegIns_EeDeltaPose
   - train: PegIns_EeDeltaPose
+  - rollout: PegIns_EeDeltaPose
   - _self_
 
 # ============================================================================
@@ -40,7 +41,7 @@ demo:
 # ============================================================================
 train:
   wandb_group: "AIL_Smoke_Test"
-  num_envs: 5
+  num_envs: ${num_procs}
   seed: ${seed}
 
   trainer: 
@@ -58,6 +59,14 @@ train:
     dataset_configs: null
 
 
+rollout:
+  wandb_group: "AIL_Smoke_Test"
+  num_envs: ${num_procs}
+  seed: ${seed}
+
+  evaluator:
+    num_eval_episodes: 10
+  
 # ============================================================================
 # 靶向性演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path!=None)
 # ============================================================================
