@@ -7,6 +7,7 @@ num_procs: 20
 clip: true
 jpg_quality: 90
 seed: 0
+save_dir: demos
 
 motion_planning_args:
   env_id: pass
@@ -21,11 +22,12 @@ motion_planning_args:
       shader_pack: default
     viewer_camera_configs:
       shader_pack: default
-  num_traj: ${..num_traj}
-  only_count_success: ${..only_count_success}
+  num_traj: ${num_traj}
+  only_count_success: ${only_count_success}
   reward_mode: null
   vis: false
   save_video: false
-  traj_name: ${..traj_name}
-  num_procs: ${..num_procs}
-  seed: ${..seed}
+  traj_name: ${traj_name}
+  num_procs: ${num_procs}
+  seed: ${seed}
+  record_dir: ${save_dir}

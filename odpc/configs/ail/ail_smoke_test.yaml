@@ -5,13 +5,14 @@
 
 defaults:
   - demo: PegIns_EeDeltaPose
+  - train: PegIns_EeDeltaPose
   - _self_
 
 # ============================================================================
 # 基础信息
 # ============================================================================
 project_name: "ail_smoke_test"
-num_procs: 2
+num_procs: 5
 seed: 42
 output_dir: runs/${project_name}_[now:%Y%m%d_%H%M%S]
 
@@ -28,10 +29,34 @@ ail_loop:
 # 初始演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path=None)
 # ============================================================================
 demo:
-  num_traj: ${..ail_loop.targeted_demos_per_cycle}
+  num_traj: ${ail_loop.targeted_demos_per_cycle}
   traj_name: "smoke_test_traj"
-  num_procs: ${..num_procs}
-  seed: ${..seed}
+  num_procs: ${num_procs}
+  seed: ${seed}
+
+
+# ============================================================================
+# 策略训练配置
+# ============================================================================
+train:
+  wandb_group: "AIL_Smoke_Test"
+  num_envs: 5
+  seed: ${seed}
+
+  trainer: 
+    total_iters: 110
+    save_freq: 50
+    eval_freq: 50
+    log_freq: 10
+    num_dataload_workers: 2
+
+    train_dataset:
+      num_traj: null
+
+  evaluator:
+    num_eval_episodes: 10
+    dataset_configs: null
+
 
 # ============================================================================
 # 靶向性演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path!=None)
@@ -44,70 +69,7 @@ targeted_demo_generation:
 # ============================================================================
 # 策略训练配置
 # ============================================================================
-trainer:
-  total_iters: 100  # 冒烟测试使用极小的迭代次数
-  batch_size: 32
-  save_freq: 50
-  eval_freq: 50
-  log_freq: 10
-  num_dataload_workers: 2
-  use_amp: false  # 冒烟测试中关闭混合精度
-  amp_dtype: "float16"
-
-model:
-  _target_: odpc.models.policy.DiffusionUnetImagePolicy
-  obs_horizon: 1
-  pred_horizon: 16
-  output_dim: 7
-  visual_encoder_config:
-    _target_: odpc.models.vision.Resnet18Encoder
-    obs_meta:
-      base_camera:
-        type: rgbd
-        rgb: sensor_data.base_camera.rgb
-        depth: sensor_data.base_camera.depth
-        shape: [1, 4, 256, 256]
-        output_dim: 256
-  noise_pred_net_config:
-    _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
-    input_dim: ${model.output_dim}
-    global_cond_dim: 256
-    diffusion_step_embed_dim: 64
-    down_dims: [64, 128, 256]
-    n_groups: 8
-  noise_scheduler_config:
-    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
-    num_train_timesteps: 100
-    beta_schedule: "squaredcos_cap_v2"
-    clip_sample: true
-    prediction_type: "epsilon"
-
-optimizer:
-  _target_: torch.optim.AdamW
-  lr: 1e-3
-  betas: [0.95, 0.999]
-  weight_decay: 1e-6
-
-lr_scheduler:
-  _target_: diffusers.schedulers.scheduling_ddpm.get_scheduler
-  name: cosine
-  num_warmup_steps: 50
-  num_training_steps: ${trainer.total_iters}
-
-ema:
-  _target_: diffusers.training_utils.EMAModel
-  decay: 0.999
-  update_after_step: 50
-  use_ema_warmup: true
-  inv_gamma: 1.0
-  power: 0.75
-
-# ============================================================================
-# 评估器配置 (用于 train_policy 阶段的评估)
-# ============================================================================
-evaluator:
-  _target_: odpc.evaluation.evaluate.Evaluator
-  # env_configs 和 dataset_configs 将在 train_policy 函数中动态传入
+# trainer:
 
 # ============================================================================
 # 离线分析配置 (Phase 4)
@@ -121,17 +83,3 @@ offline_analysis:
   uncertainty_metric: "variance"
   # 多样性采样参数
   diversity_sampling_method: "random"
-
-# ============================================================================
-# 数据集加载配置 (用于 train_policy 阶段的 ODPCDataset)
-# ============================================================================
-dataset_loader:
-  _target_: odpc.data.odpc_dataset.ODPCDataset
-  obs_horizon: 1
-  pred_horizon: 16
-  obs_processor_configs:
-    - _target_: odpc.data.obs_processors.ClampDepthProcessor
-      depth_threshold: 3000
-      clamp_to_zero: true
-    - _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
-  act_processor_configs: [] 

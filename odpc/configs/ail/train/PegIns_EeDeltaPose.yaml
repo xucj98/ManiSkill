@@ -1,0 +1,24 @@
+defaults:
+  - base
+  - _self_
+
+exp_name: "PegIns_EeDeltaPose"
+
+wandb_group: "PegIns_EeDeltaPose"
+
+data_paths:
+  - demos/PegIns_EeDeltaPose_DemoVal2k_clip.rgbd.pd_ee_delta_pose.physx_cpu.compressed.h5
+
+trainer:
+  save_best_ckpt_metric_key: "env_ind.success_once" 
+
+train_dataset:
+  num_traj: 1000
+
+evaluator:
+ env_configs:
+    ind:
+      env:
+        env_kwargs:
+          clearance: 0.005
+       

@@ -1,6 +1,7 @@
 import os
 import random
 import argparse
+import multiprocessing as mp
 from tqdm import tqdm
 from datetime import datetime
 from omegaconf import OmegaConf, DictConfig
@@ -20,15 +21,29 @@ from mani_skill.utils import common
 from diffusion_policy.utils import IterationBasedBatchSampler, worker_init_fn
 
 import odpc.envs
-from odpc.utils.utils import instantiate_from_config, parse_config_expr
+from odpc.utils.utils import instantiate_from_config, parse_config_expr, get_nested_value
 from odpc.data.data_conversion import DataConversion
 from odpc.models.policy import BasePolicy
 from odpc.evaluation.evaluate import Evaluator
 
 
+class WorkerInitFn:
+    """可序列化的 worker 初始化类，用于 DataLoader"""
+    def __init__(self, base_seed: int):
+        self.base_seed = base_seed
+
+    def __call__(self, worker_id: int):
+        return worker_init_fn(worker_id, base_seed=self.base_seed)
+
+
 def train(cfg: DictConfig):
-    cfg.demo_config = OmegaConf.load(
-        cfg.train_dataset.data_path.replace(".compressed.", ".").replace(".h5", ".yaml"))
+    if cfg.train_dataset.get("data_path", None) is not None:
+        cfg.demo_config = OmegaConf.load(
+            cfg.train_dataset.data_path.replace(".compressed.", ".").replace(".h5", ".yaml"))
+    elif cfg.train_dataset.get("data_paths", None) is not None:
+        cfg.demo_config = OmegaConf.load(
+            cfg.train_dataset.data_paths[0].replace(".compressed.", ".").replace(".h5", ".yaml"))
+
     cfg.save_dir = parse_config_expr(cfg.save_dir)
     
     print("========= start training =========")
@@ -66,11 +81,17 @@ def train(cfg: DictConfig):
     sampler = RandomSampler(dataset, replacement=False)
     batch_sampler = BatchSampler(sampler, batch_size=cfg.trainer.batch_size, drop_last=True)
     batch_sampler = IterationBasedBatchSampler(batch_sampler, cfg.trainer.total_iters)
+    
+    # 在 AIL 中，demo 生成需要使用 spawn 模式。
+    # spawn 模式比 fork 模式要严格得多，它会创建一个全新的 Python 进程，
+    # 然后通过序列化（pickle）把必要的函数和对象从主进程发送给新进程。
+    worker_init_fn_wrapper = WorkerInitFn(cfg.seed)
+    
     train_dataloader = DataLoader(
         dataset,
         batch_sampler=batch_sampler,
         num_workers=cfg.trainer.num_dataload_workers,
-        worker_init_fn=lambda worker_id: worker_init_fn(worker_id, base_seed=cfg.seed),
+        worker_init_fn=worker_init_fn_wrapper,
         persistent_workers=(cfg.trainer.num_dataload_workers > 0),
         pin_memory=True,
     )
@@ -86,6 +107,9 @@ def train(cfg: DictConfig):
 
     # 创建evaluator
     evaluator: Evaluator = instantiate_from_config(cfg.evaluator, model=ema_model)
+
+    if cfg.trainer.get("save_best_ckpt_metric_key", None) is not None:
+        best_ckpt_metric_value = -1e8
 
     # 初始化混合精度训练
     scaler = GradScaler() if cfg.trainer.use_amp else None
@@ -137,6 +161,18 @@ def train(cfg: DictConfig):
                     writer.add_scalar(f"eval/{k}", v.mean(), step)
                     print(f"eval/{k}: {v.mean():.6f}")
 
+            if cfg.trainer.get("save_best_ckpt_metric_key", None) is not None:
+                metric_value = get_nested_value(metrics, cfg.trainer.save_best_ckpt_metric_key).mean()
+                if metric_value > best_ckpt_metric_value:
+                    best_ckpt_metric_value = metric_value
+                    torch.save(
+                        {
+                            "model": model.state_dict(),
+                            "ema_model": ema_model.state_dict(),
+                        },
+                        f"{cfg.save_dir}/checkpoints/best.pt"
+                    )
+                    
         # log metrics
         if step % cfg.trainer.log_freq == 0:
             writer.add_scalar(

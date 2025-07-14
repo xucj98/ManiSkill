@@ -9,6 +9,7 @@
 import argparse
 import logging
 import pathlib
+import multiprocessing as mp
 from typing import Dict, Any, List, Optional
 
 import h5py
@@ -17,26 +18,10 @@ import pickle
 from omegaconf import DictConfig, OmegaConf
 
 from odpc.data.demo.generation import run_generation_workflow
+from odpc.training.train import train
+
 from odpc.utils.utils import load_config_with_defaults, parse_config_expr
-# 在注释中定义核心数据结构的格式，以保持清晰。
-# 后续这些将被正式定义为类或 TypedDict。
 
-# TrajectoryLog (轨迹日志): 一个字典或 HDF5 文件，包含:
-# - "trajectories": 一个轨迹列表。
-# - 每个轨迹是一个步骤列表。
-# - 每个步骤是一个字典: {
-#     "observation": np.ndarray,
-#     "action": np.ndarray,
-#     "reward": float,
-#     "done": bool,
-#     "info": {
-#         "model_uncertainty": float, # 用于离线分析的关键数据
-#         ... # 其他有用的调试信息
-#     }
-# }
-
-# HighValueStateList (高价值状态列表): 一个状态列表，保存为 .pkl 或 .json 文件。
-# 每个状态是一个完整的、可序列化的表示，可用于将环境重置到该特定点。
 
 
 def _create_dummy_h5_traj(h5_path: pathlib.Path, num_traj: int = 1, traj_len: int = 2):
@@ -85,9 +70,11 @@ def generate_expert_demos(config: DictConfig, output_dir: pathlib.Path, initial_
     """
     if initial_states_path is None:
         logging.info("阶段 1: 正在生成初始专家演示...")
+        
         demo_config = config.demo
-        # 注意：这里的 jpg_quality 是硬编码的，未来可以加入到配置中
-        generated_path_str = run_generation_workflow(cfg=demo_config, record_dir=str(output_dir), jpg_quality=90)
+        demo_config.save_dir = str(output_dir)
+
+        generated_path_str = run_generation_workflow(cfg=demo_config)
         
         # 直接使用生成的文件路径，不进行重命名
         demo_path = pathlib.Path(generated_path_str)
@@ -120,12 +107,13 @@ def train_policy(config: DictConfig, dataset_paths: List[pathlib.Path], output_d
     """
     logging.info(f"正在使用数据集进行策略训练: {dataset_paths}")
     
-    model_ckpt_path = output_dir / "policy_best.ckpt"
+    train_config = config.train
+    train_config.save_dir = str(output_dir)
+    train_config.data_paths = [str(p) for p in dataset_paths]
 
-    # TODO: 通过调用 `odpc.training.trainer` 来实现此逻辑。
-    # `odpc.data.odpc_dataset.ImitationDataset` 需要支持加载一个包含多个 HDF5 文件路径的列表，
-    # 并能够将它们聚合为一个统一的数据集进行训练。
-    model_ckpt_path.touch()  # 创建一个虚拟文件
+    train(cfg=train_config)
+
+    model_ckpt_path = output_dir / "checkpoints/best.pt"
     
     logging.info(f"训练好的模型已保存至: {model_ckpt_path}")
     return model_ckpt_path
@@ -184,6 +172,16 @@ def offline_analysis(config: DictConfig, cycle_dir: pathlib.Path, rollout_log_pa
 
 def main(args, cfg):
     """运行 A-IL 循环的主函数。"""
+    # --- 设置多进程启动方式 ---
+    # `set_start_method` 只能在程序开始时调用一次。
+    # 由于数据生成模块依赖 'spawn' 模式以确保 CUDA 安全，
+    # 我们必须在整个应用生命周期中统一使用 'spawn' 模式。
+    # PyTorch 的 DataLoader 也完全兼容 'spawn' 模式。
+    try:
+        mp.set_start_method("spawn")
+    except RuntimeError:
+        pass  # 如果已经设置，则忽略
+
     # --- 设置基础目录和日志 ---
     cfg.output_dir = parse_config_expr(cfg.output_dir)
     base_dir = pathlib.Path(cfg.output_dir)
@@ -202,7 +200,7 @@ def main(args, cfg):
     initial_dataset_path = generate_expert_demos(cfg, cycle_0_dir, initial_states_path=None)
     
     # 阶段 2: 初始模型训练
-    policy_ckpt_path = train_policy(cfg, [initial_dataset_path], cycle_0_dir)
+    policy_ckpt_path = train_policy(cfg, [initial_dataset_path], cycle_0_dir / "train")
 
     # 聚合后的数据集路径列表
     aggregated_dataset_paths = [initial_dataset_path]
