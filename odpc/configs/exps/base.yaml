@@ -72,7 +72,9 @@ model:
     beta_schedule: "squaredcos_cap_v2"
     clip_sample: true
     prediction_type: "epsilon"
-
+  action_normalizer_config:
+    _target_: odpc.models.modules.normalizer.MinMaxNormalizer
+    input_dim: ${model.output_dim}
 
 evaluator:
   _target_: odpc.evaluation.evaluate.Evaluator

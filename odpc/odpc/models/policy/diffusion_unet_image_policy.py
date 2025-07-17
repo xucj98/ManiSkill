@@ -4,11 +4,14 @@ import torch.nn.functional as F
 
 from typing import Optional
 
+from diffusion_policy.conditional_unet1d import ConditionalUnet1D
+from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
+
 from odpc.utils.utils import instantiate_from_config
 from odpc.models.vision import BaseVisionEncoder
 from odpc.models.state import BaseStateEncoder
 from odpc.models.policy.base_policy import BasePolicy
-
+from odpc.models.modules.normalizer import BaseNormalizer
 
 class DiffusionUnetImagePolicy(BasePolicy):
     def __init__(
@@ -18,6 +21,7 @@ class DiffusionUnetImagePolicy(BasePolicy):
             output_dim,
             noise_pred_net_config,
             noise_scheduler_config,
+            action_normalizer_config=None,
             visual_encoder_config=None,
             state_encoder_config=None,
     ):
@@ -34,18 +38,20 @@ class DiffusionUnetImagePolicy(BasePolicy):
         if state_encoder_config is not None:
             self.state_encoder = instantiate_from_config(state_encoder_config)
 
-        self.noise_pred_net = instantiate_from_config(noise_pred_net_config)
-        self.noise_scheduler = instantiate_from_config(noise_scheduler_config)
+        self.noise_pred_net: ConditionalUnet1D = instantiate_from_config(noise_pred_net_config)
+        self.noise_scheduler: DDPMScheduler = instantiate_from_config(noise_scheduler_config)
+        self.action_normalizer: BaseNormalizer = instantiate_from_config(action_normalizer_config)
 
     def compute_loss(
             self, 
             obs: dict, 
             action: torch.Tensor,
     ) -> torch.Tensor:
+        action = self.action_normalizer(action)
+       
         B = action.shape[0]
         device = action.device
 
-        # observation as FiLM conditioning
         conds = []
         if self.visual_encoder is not None:
             conds.append(self.visual_encoder(obs))
@@ -72,7 +78,16 @@ class DiffusionUnetImagePolicy(BasePolicy):
             global_cond=obs_cond,
         )
 
-        return F.mse_loss(noise_pred, noise)
+        if self.noise_scheduler.config.prediction_type == "epsilon":
+            target = noise
+        elif self.noise_scheduler.config.prediction_type == "v_prediction":
+            target = self.noise_scheduler.get_velocity(action, noise, timesteps)
+        elif self.noise_scheduler.config.prediction_type == "sample":
+            target = action
+        else:
+            raise TypeError("prediction type not recognized.")
+
+        return F.mse_loss(noise_pred, target)
 
     def get_action(
             self, 
@@ -112,5 +127,7 @@ class DiffusionUnetImagePolicy(BasePolicy):
                     timestep=k,
                     sample=noisy_action_seq,
                 ).prev_sample
+
+        noisy_action_seq = self.action_normalizer.unnormalize(noisy_action_seq)
 
         return noisy_action_seq  # (B, act_horizon, output_dim)
