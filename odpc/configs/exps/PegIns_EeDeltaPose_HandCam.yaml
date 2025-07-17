@@ -28,9 +28,6 @@ model:
         output_dim: 256
   noise_pred_net_config:
     global_cond_dim: 512
-  action_normalizer_config:
-    _target_: odpc.models.modules.normalizer.NullNormalizer
-    input_dim: ${model.output_dim}
 
 evaluator:
   env_configs:
