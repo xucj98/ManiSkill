@@ -11,9 +11,31 @@ data_path: demos/PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal8k.rgb+depth.pd_ee_
 train_dataset:
   num_traj: 7800
 
+model:
+  visual_encoder_config:
+    obs_meta:
+      base_camera:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb
+        depth: sensor_data.base_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 256
+      hand_camera:
+        type: rgbd
+        rgb: sensor_data.hand_camera.rgb
+        depth: sensor_data.hand_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 256
+  noise_pred_net_config:
+    global_cond_dim: 512
+  action_normalizer_config:
+    _target_: odpc.models.modules.normalizer.NullNormalizer
+    input_dim: ${model.output_dim}
+
 evaluator:
   env_configs:
     ind:
       env:
         env_kwargs:
+          robot_uids: panda_peg_insertion
           clearance: 0.005
