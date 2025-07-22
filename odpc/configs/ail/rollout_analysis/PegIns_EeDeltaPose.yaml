@@ -1,0 +1,79 @@
+exp_name: "PegIns_EeDeltaPose"
+seed: 42
+obs_horizon: 1
+act_horizon: 8
+pred_horizon: 16
+
+success_type: success_once # "success_once" or "success_at_end"
+cdf_alpha: 0.99
+patience: 2
+use_ema: true
+num_workers: 8
+batch_size: 64
+
+
+ood_finder:
+  _target_: odpc.evaluation.ood_finder.diffusion_loss_finder.DiffusionLossOODFinder
+  cdf_alpha: ${cdf_alpha}
+  patience: ${patience}
+  n_timesteps: 4  # 对于每个 (obs, act) 样本，计算 n * timesteps 个 diffusion loss，然后取平均
+  batch_size: ${batch_size}
+  num_workers: ${num_workers}
+
+ckpt_path: runs/PegIns_EeDeltaPose_NumTraj/PegIns_EeDeltaPose_NumTraj2k_20250613_170325/checkpoints/200000.pt
+rollout_path: runs/PegIns_EeDeltaPose/PegIns_EeDeltaPose_Rollout_20250721_152531/rollout_traj.h5
+data_paths: 
+  - demos/PegIns_EeDeltaPose_DemoVal2k_clip.rgbd.pd_ee_delta_pose.physx_cpu.compressed.h5
+
+obs_processor_configs:
+  - _target_: odpc.data.obs_processors.ClampDepthProcessor
+    depth_threshold: 3000
+    clamp_to_zero: true
+  - _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
+
+act_processor_configs: []
+
+train_dataset:
+  _target_: odpc.data.imitation_dataset.ImitationDataset
+  data_paths: ${data_paths}
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  num_traj: 1000
+  obs_processor_configs: ${obs_processor_configs}
+  act_processor_configs: ${act_processor_configs}
+  seed: ${seed}
+
+rollout_dataset:
+  _target_: odpc.data.rollout_dataset.RolloutDataset
+  data_path: ${rollout_path}
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  obs_processor_configs: ${obs_processor_configs}
+
+model:
+  _target_: odpc.models.policy.DiffusionUnetImagePolicy
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  output_dim: 7
+  visual_encoder_config:
+    _target_: odpc.models.vision.Resnet18Encoder
+    obs_meta:
+      base_camera:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb
+        depth: sensor_data.base_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 256
+  noise_pred_net_config:
+    _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
+    input_dim: ${model.output_dim}
+    global_cond_dim: 256
+    diffusion_step_embed_dim: 64
+    down_dims: [64, 128, 256]
+    n_groups: 8
+  noise_scheduler_config:
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+    num_train_timesteps: 100
+    beta_schedule: "squaredcos_cap_v2"
+    clip_sample: true
+    prediction_type: "epsilon"

@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from einops import repeat, rearrange
+
 from typing import Optional
 
 from diffusion_policy.conditional_unet1d import ConditionalUnet1D
@@ -40,14 +42,17 @@ class DiffusionUnetImagePolicy(BasePolicy):
 
         self.noise_pred_net: ConditionalUnet1D = instantiate_from_config(noise_pred_net_config)
         self.noise_scheduler: DDPMScheduler = instantiate_from_config(noise_scheduler_config)
-        self.action_normalizer: BaseNormalizer = instantiate_from_config(action_normalizer_config)
+        self.action_normalizer: Optional[BaseNormalizer] = None
+        if action_normalizer_config is not None:
+            self.action_normalizer = instantiate_from_config(action_normalizer_config)
 
     def compute_loss(
             self, 
             obs: dict, 
             action: torch.Tensor,
     ) -> torch.Tensor:
-        action = self.action_normalizer(action)
+        if self.action_normalizer is not None:
+            action = self.action_normalizer(action)
        
         B = action.shape[0]
         device = action.device
@@ -128,6 +133,51 @@ class DiffusionUnetImagePolicy(BasePolicy):
                     sample=noisy_action_seq,
                 ).prev_sample
 
-        noisy_action_seq = self.action_normalizer.unnormalize(noisy_action_seq)
+            if self.action_normalizer is not None:
+                noisy_action_seq = self.action_normalizer.unnormalize(noisy_action_seq)
 
         return noisy_action_seq  # (B, act_horizon, output_dim)
+    
+    @torch.no_grad()
+    def compute_avg_loss(
+            self, 
+            obs: dict,
+            action: torch.Tensor,
+            n_timesteps: int = 4,
+    ) -> torch.Tensor:
+        """
+        对于每个 (obs, act) 样本，计算 n * timesteps 个 diffusion loss, 然后取平均
+        """
+        B = action.shape[0]
+        device = action.device
+        
+        conds = []
+        if self.visual_encoder is not None:
+            conds.append(self.visual_encoder(obs))
+        if self.state_encoder is not None:
+            conds.append(self.state_encoder(obs))
+        obs_cond = torch.cat(conds, dim=-1)  # (B, obs_horizon * obs_dim)
+
+        # 重复 obs_cond 和 action 到 n * timesteps 个
+        n = n_timesteps * len(self.noise_scheduler.timesteps)
+        obs_cond = repeat(obs_cond, 'b d -> (b n) d', n=n)
+        action = repeat(action, 'b t d -> (b n) t d', n=n)
+
+        # sample noise to add to actions
+        noise = torch.randn((B * n, self.pred_horizon, self.output_dim), device=device)
+
+        timesteps = repeat(self.noise_scheduler.timesteps, 'k -> (b n k)', 
+                           b=B, n=n_timesteps).to(device)
+
+        noisy_action = self.noise_scheduler.add_noise(action, noise, timesteps)
+
+        noise_pred = self.noise_pred_net(
+            sample=noisy_action,
+            timestep=timesteps,
+            global_cond=obs_cond,
+        )
+
+        loss = F.mse_loss(noise_pred, noise, reduction='none')
+        loss = rearrange(loss, '(b n) t d -> b (n t d)', b=B, n=n)
+        loss = loss.mean(dim=-1)
+        return loss

@@ -1,3 +1,27 @@
+"""
+Usage:
+
+1. 评估一个模型: 使用模型训练的config文件
+    使用模型训练的config文件, 其中 cfg.evaluator.env_configs.ind.env._target_ = odpc.envs.factory.make_eval_envs.make_eval_envs
+    eg. configs/exps/PegIns_EeDeltaPose.yaml
+
+    python scripts/valid.py --config path_to_config.yaml --ckpt-path path_to_checkpoint.pt
+
+2. 评估多个模型, 这些模型在同一个目录下, 根据训练的step命名
+    |-- path_to_ckpt_dir/
+        |-- 100000.pt
+        |-- 200000.pt
+        |-- ...
+    
+    python scripts/valid.py --config path_to_config.yaml --ckpt-path path_to_ckpt_dir
+
+3. 进行rollout, 并记录策略与环境交互的结果
+    使用rollout的config文件, 其中 cfg.evaluator.env_configs.ind.env._target_ = odpc.envs.factory.make_eval_envs.make_rollout_envs
+    eg. configs/ail/rollout/PegIns_EeDeltaPose.yaml
+
+    python scripts/valid.py --config path_to_config.yaml --ckpt-path path_to_checkpoint.pt
+"""
+
 import os
 import random
 from datetime import datetime
@@ -21,7 +45,6 @@ def get_args():
     parser.add_argument("--config", type=str, default="configs/odpc/base.yaml")
     parser.add_argument("--ckpt-path", type=str, required=True)
     parser.add_argument("--use-ema", action="store_true")
-    parser.add_argument("--num-eval-episodes", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=256)
     args, unknown = parser.parse_known_args()
 
