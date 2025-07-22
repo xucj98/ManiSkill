@@ -52,8 +52,11 @@ class DiffusionLossOODFinder(BaseOODFinder):
         threshold = np.percentile(losses, 100 * cdf_alpha)
         self.threshold = threshold
         print(f"Diffusion loss threshold: {threshold}")
+        print(f"Diffusion loss mean: {losses.mean()}")
+        print("========= initialize DiffusionLossOODFinder =========")
         
-
+        
+    @torch.no_grad()
     def find_ood_samples(
             self, 
             observations: dict,
@@ -76,6 +79,7 @@ class DiffusionLossOODFinder(BaseOODFinder):
         )
         return loss > self.threshold
         
+    @torch.no_grad()
     def compute_diffusion_loss(
             self,
             observations: dict,

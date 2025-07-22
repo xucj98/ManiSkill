@@ -1,4 +1,4 @@
-exp_name: "PegIns_EeDeltaPose"
+exp_name: PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_MinMaxNormalizer
 seed: 42
 obs_horizon: 1
 act_horizon: 8
@@ -19,16 +19,17 @@ ood_finder:
   batch_size: ${batch_size}
   num_workers: ${num_workers}
 
-ckpt_path: runs/PegIns_EeDeltaPose_NumTraj/PegIns_EeDeltaPose_NumTraj2k_20250613_170325/checkpoints/200000.pt
-rollout_path: runs/PegIns_EeDeltaPose/PegIns_EeDeltaPose_Rollout_20250721_152531/rollout_traj.h5
+ckpt_path: runs/NormalizeAction/PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_MinMaxNormalizer_20250717_183402/checkpoints/140000.pt
+# rollout_path: runs/NormalizeAction/PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_MinMaxNormalizer_Rollout_20250722_162429/rollout_traj.h5
+rollout_path: runs/NormalizeAction/PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_MinMaxNormalizer_Rollout_20250722_173643/rollout_traj.h5
 data_paths: 
-  - demos/PegIns_EeDeltaPose_DemoVal2k_clip.rgbd.pd_ee_delta_pose.physx_cpu.compressed.h5
+  - demos/PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal200.rgb+depth.pd_ee_delta_pose.physx_cpu.compressed.h5
 
 obs_processor_configs:
-  - _target_: odpc.data.obs_processors.ClampDepthProcessor
-    depth_threshold: 3000
-    clamp_to_zero: true
-  - _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
+- _target_: odpc.data.obs_processors.ClampDepthProcessor
+  depth_threshold: 3000
+  clamp_to_zero: true
+- _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
 
 act_processor_configs: []
 
@@ -63,16 +64,28 @@ model:
         depth: sensor_data.base_camera.depth
         shape: [1, 4, 256, 256]
         output_dim: 256
+      hand_camera:
+        type: rgbd
+        rgb: sensor_data.hand_camera.rgb
+        depth: sensor_data.hand_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 256
   noise_pred_net_config:
     _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
-    input_dim: ${model.output_dim}
-    global_cond_dim: 256
+    input_dim: 7
+    global_cond_dim: 512
     diffusion_step_embed_dim: 64
-    down_dims: [64, 128, 256]
+    down_dims:
+    - 64
+    - 128
+    - 256
     n_groups: 8
   noise_scheduler_config:
     _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
     num_train_timesteps: 100
-    beta_schedule: "squaredcos_cap_v2"
+    beta_schedule: squaredcos_cap_v2
     clip_sample: true
-    prediction_type: "epsilon"
+    prediction_type: epsilon
+  action_normalizer_config:
+    _target_: odpc.models.modules.normalizer.MinMaxNormalizer
+    input_dim: 7

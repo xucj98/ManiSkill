@@ -142,12 +142,18 @@ class DiffusionUnetImagePolicy(BasePolicy):
     def compute_avg_loss(
             self, 
             obs: dict,
-            action: torch.Tensor,
+            action: Optional[torch.Tensor] = None,
             n_timesteps: int = 4,
     ) -> torch.Tensor:
         """
         对于每个 (obs, act) 样本，计算 n * timesteps 个 diffusion loss, 然后取平均
         """
+        if action is None:
+            action = self.get_action(obs)
+
+        if self.action_normalizer is not None:
+            action = self.action_normalizer(action)
+       
         B = action.shape[0]
         device = action.device
         

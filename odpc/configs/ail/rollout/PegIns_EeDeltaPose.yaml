@@ -8,6 +8,9 @@ track: false
 wandb_group: "PegIns_EeDeltaPose"
 
 evaluator:
+
+  num_eval_episodes: 20
+
   env_configs:
     ind:
       env:
