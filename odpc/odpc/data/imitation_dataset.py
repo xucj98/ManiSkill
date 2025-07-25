@@ -24,9 +24,11 @@ class ImitationDataset(Dataset):
             obs_processor_configs: List[DictConfig] = [],
             act_processor_configs: List[DictConfig] = [],
             seed: int = 42,
+            used_obs: Optional[List[str]] = None,
     ):
         self.data_paths = data_paths
         self.obs_horizon, self.pred_horizon = obs_horizon, pred_horizon
+        self.used_obs = used_obs
 
         self.obs_processors: List[BaseObsProcessor] = []
         for obs_processor_config in obs_processor_configs:
@@ -80,18 +82,25 @@ class ImitationDataset(Dataset):
         if self._h5_files is None:
             self._h5_files = [h5py.File(data_path, 'r') for data_path in self.data_paths]
 
-    def _get_slice_data(self, file, slice_indices):
+    def _get_slice_data(self, file, slice_indices, used_key=None, cur_key=""):
         """获取切片数据，支持压缩数据的自动解码"""
         if isinstance(file, (h5py.File, h5py.Group)):
-            return {key: self._get_slice_data(file[key], slice_indices) for key in file.keys()}
+            res = {}
+            for key in file.keys():
+                new_cur_key = key if cur_key == "" else cur_key + "." + key
+                data = self._get_slice_data(file[key], slice_indices, used_key=used_key, cur_key=new_cur_key)
+                if data is not None:
+                    res[key] = data
+            return res if len(res) > 0 else None
         
         elif isinstance(file, h5py.Dataset):
-            data = file[slice_indices]
-            if is_compressed_rgb_dataset(file):
-                decoded_data = decode_jpeg_sequence(data)
-                return decoded_data
-            else:
+            if used_key is None or cur_key in used_key:
+                data = file[slice_indices]
+                if is_compressed_rgb_dataset(file):
+                    data = decode_jpeg_sequence(data)
                 return data
+            else:
+                return None
             
         else:
             raise NotImplementedError(f"H5 file type {type(file)} not supported")
@@ -103,7 +112,11 @@ class ImitationDataset(Dataset):
         dataset_id, traj_key, traj_len = self.traj_info[traj_idx]
         h5_file = self._h5_files[dataset_id]
 
-        obs = self._get_slice_data(h5_file[f"{traj_key}/obs"], slice(start, start + self.obs_horizon))
+        obs = self._get_slice_data(
+            h5_file[f"{traj_key}/obs"], 
+            slice(start, start + self.obs_horizon),
+            used_key=self.used_obs,
+        )
         for obs_processor in self.obs_processors:
             obs = obs_processor.process(obs)
 
@@ -115,13 +128,15 @@ class ImitationDataset(Dataset):
         for act_processor in self.act_processors:
             act = act_processor.process(act)
 
-        for sensor in obs["sensor_data"].values():
-            for modality, data in sensor.items():
-                sensor[modality] = np.transpose(data, (0, 3, 1, 2))
+        if "sensor_data" in obs:
+            for sensor in obs["sensor_data"].values():
+                for modality, data in sensor.items():
+                    sensor[modality] = np.transpose(data, (0, 3, 1, 2))
 
         return {
             "observations": obs,
             "actions": act["actions"],
+            "traj_idx": traj_idx,
         }
 
     def __len__(self):

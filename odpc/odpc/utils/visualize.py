@@ -148,8 +148,8 @@ def visualize_video_with_metric(video: np.ndarray, metric_data: np.ndarray):
     # --- 1. 创建可视化布局 ---
     fig, (ax_video, ax_plot) = plt.subplots(
         2, 1, 
-        figsize=(10, 8), 
-        gridspec_kw={'height_ratios': [3, 1]} # 让视频区域更大
+        figsize=(32, 18), 
+        gridspec_kw={'height_ratios': [3, 2]} # 让视频区域更大
     )
     # 调整子图间距和底部边距，为滑块留出空间
     plt.subplots_adjust(bottom=0.2, hspace=0.3)
@@ -217,3 +217,5 @@ def visualize_video_with_metric(video: np.ndarray, metric_data: np.ndarray):
 
     # 显示窗口
     plt.show()
+
+    plt.close(fig)

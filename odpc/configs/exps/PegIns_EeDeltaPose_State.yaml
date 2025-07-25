@@ -1,0 +1,48 @@
+defaults:
+  - base
+  - _self_
+
+exp_name: "PegIns_EeDeltaPose_State"
+
+wandb_group: "PegIns_EeDeltaPose_State"
+
+obs_mode: state_dict
+control_mode: pd_ee_delta_pose
+
+data_path: demos/PegIns_EeDeltaPose_State_Demo200_clip.rgb+depth+state_dict.pd_ee_delta_pose.physx_cpu.compressed.h5
+
+obs_processor_configs: []
+act_processor_configs: []
+used_obs:
+  - agent.qpos
+  - agent.qvel
+  - extra.peg_pose
+  - extra.goal_pose
+  - extra.tcp_pose
+
+model:
+  _target_: odpc.models.policy.DiffusionUnetImagePolicy
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  output_dim: 7
+  visual_encoder_config: null
+  state_encoder_config:
+    _target_: odpc.models.state.IdentityStateEncoder
+    obs_meta:
+      poses:
+        type: stack_state
+        states: 
+          - agent.qpos
+          - agent.qvel
+          - extra.peg_pose
+          - extra.goal_pose
+          - extra.tcp_pose
+        shape: [1, 39]
+        output_dim: 39  
+  noise_pred_net_config:
+    _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
+    input_dim: ${model.output_dim}
+    global_cond_dim: 39
+    diffusion_step_embed_dim: 64
+    down_dims: [64, 128, 256]
+    n_groups: 8

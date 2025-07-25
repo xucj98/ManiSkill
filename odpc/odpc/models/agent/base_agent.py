@@ -48,7 +48,8 @@ class BaseAgent(nn.Module):
 
     @staticmethod
     def permute_obs(obs: dict, dims: List[int]) -> dict:
-        for sensor_data in obs["sensor_data"].values():
-            for modality in sensor_data:
-                sensor_data[modality] = sensor_data[modality].permute(*dims)
+        if "sensor_data" in obs:
+            for sensor_data in obs["sensor_data"].values():
+                for modality in sensor_data:
+                    sensor_data[modality] = sensor_data[modality].permute(*dims)
         return obs

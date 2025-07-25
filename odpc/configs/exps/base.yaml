@@ -36,6 +36,8 @@ obs_processor_configs:
 
 act_processor_configs: []
 
+used_obs: null
+
 train_dataset:
   _target_: odpc.data.odpc_dataset.ODPCDataset
   data_path: ${data_path}
@@ -44,6 +46,7 @@ train_dataset:
   num_traj: 1000
   obs_processor_configs: ${obs_processor_configs}
   act_processor_configs: ${act_processor_configs}
+  used_obs: ${used_obs}
 
 model:
   _target_: odpc.models.policy.DiffusionUnetImagePolicy
@@ -122,6 +125,7 @@ evaluator:
       num_traj: 100
       obs_processor_configs: ${obs_processor_configs}
       act_processor_configs: ${act_processor_configs}
+      used_obs: ${used_obs}
     # ood: todo
 
 
