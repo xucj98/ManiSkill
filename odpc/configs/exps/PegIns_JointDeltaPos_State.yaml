@@ -1,0 +1,51 @@
+defaults:
+  - base
+  - _self_
+
+exp_name: "PegIns_JointDeltaPos_State"
+
+wandb_group: "PegIns_JointDeltaPos_State"
+
+obs_mode: state_dict
+control_mode: pd_joint_delta_pos
+
+data_path: demos/PegIns_JointDeltaPos_State_DemoVal2k_clip.state_dict.pd_joint_delta_pos.physx_cpu.compressed.h5
+
+obs_processor_configs: []
+act_processor_configs: []
+used_obs:
+  - agent.qpos
+  - agent.qvel
+  - extra.peg_pose
+  - extra.goal_pose
+  - extra.tcp_pose
+
+train_dataset:
+  num_traj: 2000
+
+model:
+  _target_: odpc.models.policy.DiffusionUnetImagePolicy
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  output_dim: 8
+  visual_encoder_config: null
+  state_encoder_config:
+    _target_: odpc.models.state.IdentityStateEncoder
+    obs_meta:
+      poses:
+        type: stack_state
+        states: 
+          - agent.qpos
+          - agent.qvel
+          - extra.peg_pose
+          - extra.goal_pose
+          - extra.tcp_pose
+        shape: [1, 39]
+        output_dim: 39  
+  noise_pred_net_config:
+    _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
+    input_dim: ${model.output_dim}
+    global_cond_dim: 39
+    diffusion_step_embed_dim: 64
+    down_dims: [64, 128, 256]
+    n_groups: 8
