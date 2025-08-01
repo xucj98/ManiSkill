@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from typing import Union
+from typing import Union, Optional
 from scipy.spatial.transform import Rotation as R_scipy
 
 import matplotlib.pyplot as plt
@@ -118,104 +118,102 @@ def visualize_pose(
 
     return output_img_rgb
 
-
-def visualize_video_with_metric(video: np.ndarray, metric_data: np.ndarray):
+def visualize_video_with_metric(
+    video: np.ndarray, 
+    metric_data: np.ndarray, 
+    is_key_frame: Optional[np.ndarray] = None
+):
     """
-    创建一个交互式可视化窗口，同步显示视频帧和其对应的指标曲线。
-
+    创建一个交互式可视化窗口，同步显示视频、指标曲线和关键帧标记。
     通过拖动滑块，可以实时查看任意时刻的视频帧、曲线位置和指标数值。
 
     参数:
-    - video (np.ndarray): 视频帧序列。
-      - 形状: (t, h, w, 3)
-      - 类型: uint8
-      - t: 帧数
-      - h: 高度
-      - w: 宽度
-      - 3: RGB通道
-    - metric_data (np.ndarray): 每帧对应的指标数据。
-      - 形状: (t,)
-      - 类型: float or int
-      - t: 指标数量，必须与视频帧数一致
+        - video (np.ndarray): 视频帧序列。
+            - 形状: (t, h, w, 3)
+            - 类型: uint8
+        - metric_data (np.ndarray): 每帧对应的指标数据。
+            - 形状: (t,)
+            - 类型: float
+        - is_key_frame (np.ndarray): 关键帧标记。
+            - 形状: (t,)
+            - 类型: bool
+    
     """
     assert video.shape[0] == metric_data.shape[0], \
         f"视频的帧数 ({video.shape[0]}) 与指标数据的长度 ({metric_data.shape[0]}) 不匹配。"
+    if is_key_frame is not None:
+        assert video.shape[0] == is_key_frame.shape[0], \
+            f"视频的帧数 ({video.shape[0]}) 与关键帧标记的长度 ({is_key_frame.shape[0]}) 不匹配。"
 
     total_frames = video.shape[0]
-        
     x_data = np.arange(total_frames)
 
     # --- 1. 创建可视化布局 ---
-    fig, (ax_video, ax_plot) = plt.subplots(
-        2, 1, 
-        figsize=(32, 18), 
-        gridspec_kw={'height_ratios': [3, 2]} # 让视频区域更大
-    )
-    # 调整子图间距和底部边距，为滑块留出空间
-    plt.subplots_adjust(bottom=0.2, hspace=0.3)
+    fig_height = 18
+    if is_key_frame is not None:
+        fig, (ax_video, ax_indicator, ax_plot) = plt.subplots(
+            3, 1, 
+            figsize=(32, fig_height), 
+            gridspec_kw={'height_ratios': [10, 1, 6]}
+        )
+        plt.subplots_adjust(bottom=0.15, hspace=0.4)
+    else:
+        fig, (ax_video, ax_plot) = plt.subplots(
+            2, 1, 
+            figsize=(32, fig_height), 
+            gridspec_kw={'height_ratios': [3, 2]}
+        )
+        plt.subplots_adjust(bottom=0.15, hspace=0.3)
 
     # --- 2. 初始化显示 ---
-    
-    # 在 ax_video 中显示第一帧
-    # `im_video` 是一个图像对象，我们后续会更新它的数据
     im_video = ax_video.imshow(video[0])
     ax_video.set_title("Video Frame (Frame: 0)")
     ax_video.axis('off')
 
-    # 在 ax_plot 中绘制完整的指标曲线
     ax_plot.plot(x_data, metric_data, lw=2, color='royalblue')
     ax_plot.set_xlim(0, total_frames - 1)
     ax_plot.set_title("Metric Curve")
     ax_plot.set_xlabel("Frame Number")
     ax_plot.set_ylabel("Metric Value")
     ax_plot.grid(True)
+    vline_plot = ax_plot.axvline(x=0, color='red', linestyle='--', lw=2)
+    annotation = ax_plot.text(0, metric_data[0], f'Value: {metric_data[0]:.2f}', bbox=dict(boxstyle="round,pad=0.4", fc="lemonchiffon", ec="black", lw=1))
 
-    # 添加一个竖线来标记当前帧位置
-    vline = ax_plot.axvline(x=0, color='red', linestyle='--', lw=2)
-    
-    # 添加一个文本框来显示当前帧的指标值
-    initial_value = metric_data[0]
-    annotation = ax_plot.text(
-        0, initial_value,
-        f'Value: {initial_value:.2f}',
-        bbox=dict(boxstyle="round,pad=0.4", fc="lemonchiffon", ec="black", lw=1)
-    )
+    # --- 3. 绘制关键帧指示器 (如果提供) ---
+    if is_key_frame is not None:
+        # 创建一个 (1, T, 4) 的RGBA图像用于色带
+        indicator_bar = np.zeros((1, total_frames, 4))
+        indicator_bar[:, :, 3] = 1.0  # Alpha channel
+        indicator_bar[:, is_key_frame, 0] = 1.0  # Red channel for key frames
+        indicator_bar[:, ~is_key_frame, 1] = 0.5  # Green channel for normal frames (grayish)
+        indicator_bar[:, ~is_key_frame, 2] = 0.5  # Blue channel for normal frames (grayish)
+
+        ax_indicator.imshow(indicator_bar, aspect='auto', interpolation='nearest')
+        ax_indicator.set_title("Key-Frame Indicator")
+        ax_indicator.set_yticks([])
+        ax_indicator.set_xlabel("Frame Number")
+        vline_indicator = ax_indicator.axvline(x=0, color='white', linestyle='--', lw=2)
 
     # --- 4. 创建滑块控件 ---
-    ax_slider = plt.axes([0.15, 0.08, 0.75, 0.03])
-    slider = Slider(
-        ax=ax_slider,
-        label='Frame',
-        valmin=0,
-        valmax=total_frames - 1,
-        valinit=0,
-        valstep=1  # 步长为1，确保是整数帧
-    )
+    ax_slider = plt.axes([0.15, 0.05, 0.75, 0.03])
+    slider = Slider(ax=ax_slider, label='Frame', valmin=0, valmax=total_frames - 1, valinit=0, valstep=1)
 
     # --- 5. 定义更新函数并绑定 ---
     def update(val):
-        # val是滑块的当前值，需要转为整数
         frame_idx = int(slider.val)
-        
-        # 更新视频帧
         im_video.set_data(video[frame_idx])
         ax_video.set_title(f"Video Frame (Frame: {frame_idx})")
         
-        # 更新曲线图上的竖线
-        vline.set_xdata([frame_idx])
-        
-        # 更新注释文本和位置
+        vline_plot.set_xdata([frame_idx])
         current_value = metric_data[frame_idx]
         annotation.set_position((frame_idx, current_value))
         annotation.set_text(f'Value: {current_value:.2f}')
         
-        # 重绘画布
+        if is_key_frame is not None:
+            vline_indicator.set_xdata([frame_idx])
+        
         fig.canvas.draw_idle()
 
-    # 将滑块的 on_changed 事件绑定到 update 函数
     slider.on_changed(update)
-
-    # 显示窗口
     plt.show()
-
     plt.close(fig)

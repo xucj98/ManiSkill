@@ -2,6 +2,7 @@ import os
 import json
 import h5py
 import pathlib
+from tqdm import tqdm
 from typing import List, Dict
 
 import numpy as np
@@ -124,7 +125,7 @@ def analyze_rollout(
     traj_data = []
     results = {}
 
-    for data in dataloader:
+    for data in tqdm(dataloader, desc="Analyzing rollout"):
         if cur_traj_idx != data["traj_idx"]:
             if cur_traj_idx is not None:
                 key_frames = process_traj(traj_data, key_frame_finder, device)

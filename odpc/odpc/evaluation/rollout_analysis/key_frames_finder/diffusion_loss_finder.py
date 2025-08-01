@@ -70,3 +70,15 @@ class DiffusionLossFinder(BaseKeyFrameFinder):
             "metric_values": loss.cpu().numpy(),
         }
         
+    @torch.no_grad()
+    def compute_diffusion_loss(
+            self,
+            observations: dict,
+            actions: torch.Tensor,
+    ) -> torch.Tensor:
+        loss = self.model.compute_avg_loss(
+            obs=observations,
+            action=actions,
+            n_timesteps=self.n_timesteps,
+        )
+        return loss
