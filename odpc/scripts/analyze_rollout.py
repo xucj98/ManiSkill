@@ -2,8 +2,8 @@ import argparse
 
 from omegaconf import DictConfig, OmegaConf
 
-from odpc.evaluation.analyze_rollout import rollout_analysis
-from odpc.utils.utils import load_config_with_defaults
+from odpc.evaluation.rollout_analysis import analyze_rollout
+from odpc.utils.utils import load_config_with_defaults, parse_config_expr
 
 
 def get_args():
@@ -24,4 +24,4 @@ def get_args():
 
 if __name__ == "__main__":
     args, cfg = get_args()
-    rollout_analysis(cfg)
+    analyze_rollout(cfg)

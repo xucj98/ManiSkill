@@ -1,3 +1,4 @@
+import os
 import json
 import h5py
 import pathlib
@@ -7,33 +8,34 @@ import numpy as np
 
 import torch
 from torch.utils.data import DataLoader
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from mani_skill.utils import common
 
-from odpc.utils.utils import instantiate_from_config, get_data_shape
+from odpc.data.rollout_dataset import RolloutDataset
+from odpc.utils.utils import instantiate_from_config, parse_config_expr
 from odpc.models.policy import BasePolicy
-from odpc.evaluation.ood_finder.base_ood_finder import BaseOODFinder
-from odpc.utils.visualize import visualize_video_with_metric
+from odpc.evaluation.rollout_analysis.key_frames_finder.base import BaseKeyFrameFinder
+
 
 def filter_failed_traj(
-        config: DictConfig,
-) -> pathlib.Path:
+        success_type: str,
+        rollout_path: str,
+) -> List[str]:
     
     success_traj_keys = []
     failed_traj_keys = []
     
-    with h5py.File(config.rollout_path, "r") as f:
-        print(get_data_shape(f[list(f.keys())[0]]))
+    with h5py.File(rollout_path, "r") as f:
         for traj_key in f.keys():
             traj_data = f[traj_key]
             success_array = traj_data["success"][:]
-            if config.success_type == "success_once":
+            if success_type == "success_once":
                 success = success_array.any()
-            elif config.success_type == "success_at_end":
+            elif success_type == "success_at_end":
                 success = success_array[-1]
             else:
-                raise ValueError(f"Invalid success type: {config.success_type}")
+                raise ValueError(f"Invalid success type: {success_type}")
 
             if success:
                 success_traj_keys.append(traj_key)
@@ -61,26 +63,28 @@ def concat_traj_data(
             raise ValueError(f"Invalid data type: {type(data)}")
     return res
 
+
 def process_traj(
         traj_data: List[Dict],
-        ood_finder: BaseOODFinder,
+        key_frame_finder: BaseKeyFrameFinder,
         device: torch.device,
 ):
     traj_data = concat_traj_data(traj_data)
     traj_data = common.to_tensor(traj_data, device)
-    loss = ood_finder.compute_diffusion_loss(
-        traj_data["observations"],
-        traj_data["actions"],
-    )
-    video = traj_data["observations"]["sensor_data"]["base_camera"]["rgb"].cpu().numpy()[:, 0, ...]
-    video = np.transpose(video, (0, 2, 3, 1))
-    loss = loss.cpu().numpy()
+    key_frames = key_frame_finder.find_key_frames_from_trajectory(traj_data)
+    key_frames["frame_idx"] = traj_data["frame_idx"].tolist()
+    key_frames["is_key_frame"] = key_frames["is_key_frame"].tolist()
+    key_frames["metric_values"] = key_frames["metric_values"].tolist()
+    return key_frames
 
-    visualize_video_with_metric(video, loss)
 
-def rollout_analysis(
+def analyze_rollout(
         config: DictConfig,
 ) -> pathlib.Path:
+
+    config.save_dir = parse_config_expr(config.save_dir)
+    os.makedirs(config.save_dir, exist_ok=True)
+    OmegaConf.save(config, os.path.join(config.save_dir, "config.yaml"))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -95,14 +99,14 @@ def rollout_analysis(
 
     train_dataset = instantiate_from_config(config.train_dataset)
 
-    ood_finder: BaseOODFinder = instantiate_from_config(
-        config.ood_finder,
+    key_frame_finder: BaseKeyFrameFinder = instantiate_from_config(
+        config.key_frame_finder,
         model=model,
-        dataset=train_dataset,
+        train_dataset=train_dataset,
     )
 
-    failed_traj_keys = filter_failed_traj(config)
-    rollout_dataset = instantiate_from_config(
+    failed_traj_keys = filter_failed_traj(config.success_type, config.rollout_path)
+    rollout_dataset: RolloutDataset = instantiate_from_config(
         config.rollout_dataset,
         traj_keys=failed_traj_keys,
     )
@@ -118,15 +122,26 @@ def rollout_analysis(
 
     cur_traj_idx = None
     traj_data = []
+    results = {}
 
     for data in dataloader:
         if cur_traj_idx != data["traj_idx"]:
             if cur_traj_idx is not None:
-                process_traj(traj_data, ood_finder, device)
+                key_frames = process_traj(traj_data, key_frame_finder, device)
+                traj_key = rollout_dataset.traj_info[cur_traj_idx][1]
+                results[traj_key] = key_frames
             cur_traj_idx = data["traj_idx"]
             traj_data = []
         traj_data.append(data)
 
     if cur_traj_idx is not None:
-        process_traj(traj_data, ood_finder, device)
+        key_frames = process_traj(traj_data, key_frame_finder, device)
+        traj_key = rollout_dataset.traj_info[cur_traj_idx][1]
+        results[traj_key] = key_frames
 
+    result_path = pathlib.Path(config.save_dir) / "rollout_analysis_results.json"
+    with open(result_path, "w") as f:
+        json.dump(results, f)
+    print(f"Rollout analysis results saved to {result_path}")
+
+    return result_path

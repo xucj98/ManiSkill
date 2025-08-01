@@ -57,7 +57,7 @@ demo的存储方式作为基础设施需要优先实现，现在一个demo占用
         - [ ] 数据压缩后，删除原始数据
     - [ ] 学习tcp pose / object pose / gflow
     - [ ] 测试DINOv2作为backbone
-- [ ] 在第二个任务上验证（细节待完善）
+- [x] 在 StackCuboid 任务上完成验证
 
 
 ## A-IL 框架开发 *(P1)*

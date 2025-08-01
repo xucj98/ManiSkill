@@ -8,27 +8,27 @@ from torch.utils.data import Dataset, DataLoader
 from mani_skill.utils import common
 
 from odpc.models.policy import BasePolicy
-from odpc.evaluation.ood_finder.base_ood_finder import BaseOODFinder
+from odpc.evaluation.rollout_analysis.key_frames_finder.base import BaseKeyFrameFinder
 
 
-class DiffusionLossOODFinder(BaseOODFinder):
+class DiffusionLossFinder(BaseKeyFrameFinder):
     def __init__(
             self, 
             model: BasePolicy, 
-            dataset: Dataset, 
+            train_dataset: Dataset, 
             cdf_alpha: float = 0.99,
             patience: int = 2,
             n_timesteps: int = 4,
             batch_size: int = 16,
             num_workers: int = 8,
     ):
-        super().__init__(model, dataset, patience)
+        super().__init__(model, train_dataset)
         self.n_timesteps = n_timesteps
         
         print("========= initialize DiffusionLossOODFinder =========")
         
         dataloader = DataLoader(
-            dataset,
+            train_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
             shuffle=False,
@@ -47,7 +47,7 @@ class DiffusionLossOODFinder(BaseOODFinder):
                 n_timesteps=n_timesteps,
             )
             losses += loss.cpu().numpy().tolist()
-
+          
         losses = np.array(losses)
         threshold = np.percentile(losses, 100 * cdf_alpha)
         self.threshold = threshold
@@ -55,42 +55,18 @@ class DiffusionLossOODFinder(BaseOODFinder):
         print(f"Diffusion loss mean: {losses.mean()}")
         print("========= initialize DiffusionLossOODFinder =========")
         
-        
     @torch.no_grad()
-    def find_ood_samples(
-            self, 
-            observations: dict,
-            actions: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        根据输入的observations和actions，返回一组bool值，表示每个样本是否是OOD的。
-
-        Args:
-            observations: dict, (B, obs_horizon, *), 输入的observations
-            actions: torch.Tensor, (B, pred_horizon, *), 输入的actions
-        
-        Returns:
-            torch.Tensor, (B,), 每个样本是否是OOD的bool值。
-        """
-        loss = self.model.compute_avg_loss(
-            obs=observations,
-            action=actions,
-            n_timesteps=self.n_timesteps,
-        )
-        return loss > self.threshold
-        
-    @torch.no_grad()
-    def compute_diffusion_loss(
+    def find_key_frames_from_trajectory(
             self,
-            observations: dict,
-            actions: torch.Tensor,
-    ) -> torch.Tensor:
-        loss = self.model.compute_avg_loss(
-            obs=observations,
-            action=actions,
-            n_timesteps=self.n_timesteps,
+            trajectory: dict,
+    ) -> dict:
+        loss = self.compute_diffusion_loss(
+            observations=trajectory["observations"],
+            actions=trajectory["actions"],
         )
-        return loss
-        
-        
+        is_key_frame = loss > self.threshold
+        return {
+            "is_key_frame": is_key_frame.cpu().numpy(),
+            "metric_values": loss.cpu().numpy(),
+        }
         

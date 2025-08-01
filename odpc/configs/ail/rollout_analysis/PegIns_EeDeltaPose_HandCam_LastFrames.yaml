@@ -1,12 +1,10 @@
-exp_name: PegIns_DiffusionLossFinder
+exp_name: PegIns_LastFramesFinder
 seed: 42
 obs_horizon: 1
 act_horizon: 8
 pred_horizon: 16
 
 success_type: success_once # "success_once" or "success_at_end"
-cdf_alpha: 0.99
-patience: 2
 use_ema: true
 num_workers: 8
 
@@ -25,29 +23,8 @@ obs_processor_configs:
 act_processor_configs: []
 
 key_frame_finder:
-  _target_: odpc.evaluation.rollout_analysis.DiffusionLossFinder
-  cdf_alpha: 0.99
-  patience: 2
-  n_timesteps: 4  # 对于每个 (obs, act) 样本，计算 n * timesteps 个 diffusion loss，然后取平均
-  batch_size: 64
-  num_workers: ${num_workers}
-
-train_dataset:
-  _target_: odpc.data.imitation_dataset.ImitationDataset
-  data_paths: ${data_paths}
-  obs_horizon: ${obs_horizon}
-  pred_horizon: ${pred_horizon}
-  num_traj: 1000
-  obs_processor_configs: ${obs_processor_configs}
-  act_processor_configs: ${act_processor_configs}
-  seed: ${seed}
-
-rollout_dataset:
-  _target_: odpc.data.rollout_dataset.RolloutDataset
-  data_path: ${rollout_path}
-  obs_horizon: ${obs_horizon}
-  pred_horizon: ${pred_horizon}
-  obs_processor_configs: ${obs_processor_configs}
+  _target_: odpc.evaluation.rollout_analysis.LastFramesFinder
+  num_last_frames: 10
 
 model:
   _target_: odpc.models.policy.DiffusionUnetImagePolicy
@@ -88,3 +65,20 @@ model:
   action_normalizer_config:
     _target_: odpc.models.modules.normalizer.MinMaxNormalizer
     input_dim: 7
+
+train_dataset:
+  _target_: odpc.data.imitation_dataset.ImitationDataset
+  data_paths: ${data_paths}
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  num_traj: 1000
+  obs_processor_configs: ${obs_processor_configs}
+  act_processor_configs: ${act_processor_configs}
+  seed: ${seed}
+
+rollout_dataset:
+  _target_: odpc.data.rollout_dataset.RolloutDataset
+  data_path: ${rollout_path}
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  obs_processor_configs: ${obs_processor_configs}

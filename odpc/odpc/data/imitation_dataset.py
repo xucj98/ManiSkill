@@ -38,8 +38,8 @@ class ImitationDataset(Dataset):
         for act_processor_config in act_processor_configs:
             self.act_processors.append(utils.instantiate_from_config(act_processor_config))
 
-        self.traj_info: List[Tuple[int, str, int]] = []
-        self.slices: List[Tuple[int, int, int]] = []
+        self.traj_info: List[Tuple[int, str, int]] = []  # dataset_id, traj_key, traj_len
+        self.slices: List[Tuple[int, int, int]] = []  # traj_idx, start, end
         total_transitions = 0
 
         for dataset_id, data_path in enumerate(self.data_paths):

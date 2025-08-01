@@ -8,6 +8,8 @@ act_horizon: 8
 track: false
 wandb_group: NormalizeAction
 
+num_envs: 100
+
 model:
   visual_encoder_config:
     _target_: odpc.models.vision.Resnet18Encoder
@@ -32,7 +34,7 @@ model:
 
 evaluator:
  
-  num_eval_episodes: 20
+  num_eval_episodes: 100
  
   env_configs:
     ind:
@@ -40,4 +42,5 @@ evaluator:
         env_kwargs:
           robot_uids: panda_peg_insertion
           clearance: 0.005
+          max_episode_steps: 200
  
