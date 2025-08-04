@@ -1,0 +1,46 @@
+defaults:
+  - base
+  - _self_
+  
+exp_name: "PegIns_EeDeltaPose_HandCam_PreInsAug80_HoleSize5_Demo10"
+
+wandb_group: "PegIns_EeDeltaPose_PreInsAug"
+
+data_path: demos/PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal200.rgb+depth.pd_ee_delta_pose.physx_cpu.compressed.h5
+data_paths: 
+  - demos/PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal200.rgb+depth.pd_ee_delta_pose.physx_cpu.compressed.h5
+  - demos/PegIns_EeDeltaPose_HandCam_HoleSize5_PreInsAug100_DemoVal200_clip.rgbd.pd_ee_delta_pose.physx_cpu.compressed.h5
+
+train_dataset:
+  _target_: odpc.data.imitation_dataset.ImitationDataset
+  data_path: null
+  data_paths: ${data_paths}
+  num_traj: 
+    PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal200.rgb+depth.pd_ee_delta_pose.physx_cpu.compressed.h5: 2
+    PegIns_EeDeltaPose_HandCam_HoleSize5_PreInsAug100_DemoVal200_clip.rgbd.pd_ee_delta_pose.physx_cpu.compressed.h5: 8
+
+model:
+  visual_encoder_config:
+    obs_meta:
+      base_camera:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb
+        depth: sensor_data.base_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 256
+      hand_camera:
+        type: rgbd
+        rgb: sensor_data.hand_camera.rgb
+        depth: sensor_data.hand_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 256
+  noise_pred_net_config:
+    global_cond_dim: 512
+
+evaluator:
+  env_configs:
+    ind:
+      env:
+        env_kwargs:
+          robot_uids: panda_peg_insertion
+          clearance: 0.005

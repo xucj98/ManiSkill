@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 import random
 from torch.utils.data.dataset import Dataset
-from typing import List, Union, Optional, Tuple
+from typing import List, Union, Optional, Tuple, Dict
 from omegaconf import DictConfig
 
 from odpc.utils import utils
@@ -19,13 +19,16 @@ class ImitationDataset(Dataset):
             obs_horizon: int,
             pred_horizon: int,
             slices_step: int = 1,
-            num_traj: Optional[int] = None,
+            num_traj: Optional[Union[int, Dict[str, int]]] = None,
             valid: bool = False,
             obs_processor_configs: List[DictConfig] = [],
             act_processor_configs: List[DictConfig] = [],
             seed: int = 42,
             used_obs: Optional[List[str]] = None,
     ):
+        """
+        num_traj 可以是一个整数，表示从所有数据中随机抽取的轨迹总数量，也可以是一个字典，表示从每个数据集中随机抽取的轨迹数量
+        """
         self.data_paths = data_paths
         self.obs_horizon, self.pred_horizon = obs_horizon, pred_horizon
         self.used_obs = used_obs
@@ -42,17 +45,31 @@ class ImitationDataset(Dataset):
         self.slices: List[Tuple[int, int, int]] = []  # traj_idx, start, end
         total_transitions = 0
 
+        if isinstance(num_traj, int): # 计算每个数据集中需要抽取的轨迹数量
+            num_data_total = 0
+            num_data_dict = {}
+            for dataset_id, data_path in enumerate(self.data_paths):
+                dataset_name = data_path.split("/")[-1]
+                with h5py.File(data_path, "r") as file:
+                    num_data = len(file.keys())
+                    num_data_dict[dataset_name] = num_data
+                    num_data_total += num_data
+            for dataset_name in num_data_dict:
+                num_data_dict[dataset_name] = int(num_data_dict[dataset_name] * num_traj / num_data_total)
+            num_traj = num_data_dict
+
         for dataset_id, data_path in enumerate(self.data_paths):
             with h5py.File(data_path, "r") as file:
                 keys = list(file.keys())
+                if num_traj is not None:
+                    dataset_name = data_path.split("/")[-1]
+                    if dataset_name not in num_traj:
+                        raise ValueError(f"Dataset {dataset_name} not found in num_traj")
+                    else:
+                        keys = keys[:num_traj[dataset_name]] if valid else keys[-num_traj[dataset_name]:]
                 for k in keys:
                     self.traj_info.append((dataset_id, k, file[k]["actions"].shape[0]))
-             
-        if num_traj is not None:
-            rng = random.Random(seed)
-            rng.shuffle(self.traj_info)
-            self.traj_info = self.traj_info[:num_traj] if not valid else self.traj_info[-num_traj:]
-
+            
         pbar = tqdm(total=len(self.traj_info), desc="Prepare dataset.")
 
         for traj_idx in range(len(self.traj_info)):

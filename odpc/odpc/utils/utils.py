@@ -112,7 +112,7 @@ def instantiate_from_config(config: DictConfig, **override_kwargs):
     module, cls = config["_target_"].rsplit(".", 1)
     params = dict()
     for k, v in config.items():
-        if k != "_target_":
+        if k != "_target_" and v is not None:
             params[k] = v
     params.update(override_kwargs)
 
