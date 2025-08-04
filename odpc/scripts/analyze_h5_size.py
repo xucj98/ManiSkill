@@ -1,6 +1,7 @@
 import os
 import h5py
 import argparse
+from tqdm import tqdm
 from collections import defaultdict
 from h5py import h5o
 import numpy as np # 需要 numpy 来使用 np.sum
@@ -81,7 +82,7 @@ def analyze_space_usage(h5_path: str):
             find_datasets_recursively(hf, size_summary, processed_addresses)
         else:
             print(f"找到 {len(traj_keys)} 条轨迹，开始统计（将自动处理共享数据和压缩）...")
-            for traj_key in traj_keys:
+            for traj_key in tqdm(traj_keys):
                 traj_group = hf[traj_key]
                 find_datasets_recursively(traj_group, size_summary, processed_addresses)
 
