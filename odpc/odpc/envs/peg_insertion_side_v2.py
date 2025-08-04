@@ -76,9 +76,9 @@ class PegInsertionSideV2Env(PegInsertionSideEnv):
             return gym.spaces.Box(low=low, high=high, dtype=space.dtype)
         return space
 
-    def _load_scene(self, options: dict):
-        sapien.physx.set_default_material(static_friction=20.0, dynamic_friction=20.0, restitution=0.0)
-        super()._load_scene(options)
+    # def _load_scene(self, options: dict):
+        # sapien.physx.set_default_material(static_friction=20.0, dynamic_friction=20.0, restitution=0.0)
+        # super()._load_scene(options)
 
     @property
     def _default_sensor_configs(self):
