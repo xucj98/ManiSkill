@@ -1,0 +1,64 @@
+defaults:
+  - base
+  - _self_
+
+exp_name: "StackCuboid_EeDeltaPose_State_Size20_Demo200"
+
+wandb_group: "StackCuboid_EeDeltaPose_State"
+
+obs_mode: state_dict
+control_mode: pd_ee_delta_pose
+
+data_path: demos/StackCuboid_EeDeltaPose_Size20_DemoVal2k_clip.state_dict.pd_ee_delta_pose.physx_cpu.compressed.h5
+  
+obs_processor_configs: []
+act_processor_configs: []
+used_obs: 
+  - agent.qpos
+  - agent.qvel
+  - extra.cuboidA_pose
+  - extra.cuboidB_pose
+  - extra.tcp_pose
+  - extra.cuboidA_to_cuboidB_pos
+  - extra.tcp_to_cuboidA_pos
+  - extra.tcp_to_cuboidB_pos
+
+train_dataset:
+  num_traj: 200
+  used_obs: ${used_obs}
+
+model:
+  _target_: odpc.models.policy.DiffusionUnetImagePolicy
+  obs_horizon: ${obs_horizon}
+  pred_horizon: ${pred_horizon}
+  output_dim: 7
+  visual_encoder_config: null
+  state_encoder_config:
+    _target_: odpc.models.state.IdentityStateEncoder
+    obs_meta:
+      states:
+        type: stack_state
+        states: ${used_obs}
+        shape: [1, 48]
+        output_dim: 48  
+  noise_pred_net_config:
+    _target_: diffusion_policy.conditional_unet1d.ConditionalUnet1D
+    input_dim: ${model.output_dim}
+    global_cond_dim: 48
+    diffusion_step_embed_dim: 64
+    down_dims: [64, 128, 256]
+    n_groups: 8
+ 
+
+evaluator:
+  _target_: odpc.evaluation.evaluate.Evaluator
+
+  num_eval_episodes: 100
+
+  env_configs:
+    ind:
+      env:
+        env_id: StackCuboid-v1
+        env_kwargs:
+          cuboid_half_size: 0.020
+          robot_uids: "panda_wristcam"

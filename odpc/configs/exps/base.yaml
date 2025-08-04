@@ -101,7 +101,6 @@ evaluator:
           sensor_configs:
             shader_pack: default
           robot_uids: panda
-          camera_mode: fixed
           max_episode_steps: 300
         other_kwargs:
           obs_horizon: ${obs_horizon}
