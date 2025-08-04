@@ -59,12 +59,13 @@ def evaluate_on_env(
 def evaluate_on_dataset(
         model: BasePolicy, dataset, batch_size, device, video_dir=None
 )-> Dict[str, np.ndarray]:
+    
     dataloader = DataLoader(
         dataset, 
         batch_size=batch_size, 
-        num_workers=8, 
+        num_workers=4, 
         shuffle=False, 
-        drop_last=False
+        drop_last=False,
     )
 
     square_error = 0.
