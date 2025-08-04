@@ -2,13 +2,13 @@ defaults:
   - base
   - _self_
 
-exp_name: PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_MinMaxNormalizer_Rollout
+exp_name: PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_NullNormalizer_Rollout
 act_horizon: 8
 
 track: false
-wandb_group: NormalizeAction
+wandb_group: Rollout
 
-num_envs: 100
+num_envs: 20
 
 model:
   visual_encoder_config:
@@ -29,12 +29,12 @@ model:
   noise_pred_net_config:
     global_cond_dim: 512
   action_normalizer_config:
-    _target_: odpc.models.modules.normalizer.MinMaxNormalizer
+    _target_: odpc.models.modules.normalizer.NullNormalizer
     input_dim: 7
 
 evaluator:
  
-  num_eval_episodes: 100
+  num_eval_episodes: 20
  
   env_configs:
     ind:
@@ -42,5 +42,4 @@ evaluator:
         env_kwargs:
           robot_uids: panda_peg_insertion
           clearance: 0.005
-          max_episode_steps: 200
- 
+          max_episode_steps: 300

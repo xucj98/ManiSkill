@@ -11,9 +11,8 @@ use_ema: true
 num_workers: 8
 
 save_dir: runs/rollout_analysis/${exp_name}_[now:%Y%m%d_%H%M%S]
-ckpt_path: runs/NormalizeAction/PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_MinMaxNormalizer_20250717_183402/checkpoints/140000.pt
-# rollout_path: runs/NormalizeAction/PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_MinMaxNormalizer_Rollout_20250801_140251/rollout_traj.h5
-rollout_path: runs/NormalizeAction/PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_MinMaxNormalizer_Rollout_20250801_141846/rollout_traj.h5
+ckpt_path: runs/NormalizeAction/PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_NullNormalizer_20250717_183251/checkpoints/140000.pt
+rollout_path: runs/Rollout/PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_NullNormalizer_Rollout_20250804_194708/rollout_traj.h5
 
 data_paths: 
   - demos/PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal200.rgb+depth.pd_ee_delta_pose.physx_cpu.compressed.h5
@@ -88,5 +87,5 @@ model:
     clip_sample: true
     prediction_type: epsilon
   action_normalizer_config:
-    _target_: odpc.models.modules.normalizer.MinMaxNormalizer
+    _target_: odpc.models.modules.normalizer.NullNormalizer
     input_dim: 7
