@@ -60,7 +60,7 @@ def find_datasets_recursively(
         elif isinstance(item, h5py.Group):
             find_datasets_recursively(item, size_summary, processed_addresses, base_path=current_path)
 
-def analyze_space_usage(h5_path: str):
+def analyze_space_usage(h5_path: str, dry_run: bool = False):
     """分析HDF5文件内各部分的空间占用。"""
     if not os.path.exists(h5_path):
         print(f"错误: 文件不存在 '{h5_path}'")
@@ -82,6 +82,8 @@ def analyze_space_usage(h5_path: str):
             find_datasets_recursively(hf, size_summary, processed_addresses)
         else:
             print(f"找到 {len(traj_keys)} 条轨迹，开始统计（将自动处理共享数据和压缩）...")
+            if dry_run:
+                traj_keys = traj_keys[:10]
             for traj_key in tqdm(traj_keys):
                 traj_group = hf[traj_key]
                 find_datasets_recursively(traj_group, size_summary, processed_addresses)
@@ -115,9 +117,10 @@ def analyze_space_usage(h5_path: str):
 def get_args():
     parser = argparse.ArgumentParser(description="分析 HDF5 文件中每个数据集key在所有轨迹中的总空间占用。")
     parser.add_argument('h5_paths', nargs='+', help='一个或多个HDF5文件的路径，用于分析。')
+    parser.add_argument('--dry_run', action='store_true')
     return parser.parse_args()
 
 if __name__ == '__main__':
     args = get_args()
     for path in args.h5_paths:
-        analyze_space_usage(path)
+        analyze_space_usage(path, args.dry_run)
