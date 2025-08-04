@@ -11,6 +11,14 @@ data_paths:
   - demos/PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal200.rgb+depth.pd_ee_delta_pose.physx_cpu.compressed.h5
   - demos/PegIns_EeDeltaPose_HandCam_HoleSize5_PreInsAug100_DemoVal200_clip.rgbd.pd_ee_delta_pose.physx_cpu.compressed.h5
 
+used_obs:
+  - sensor_data.base_camera.rgb
+  - sensor_data.base_camera.depth
+  - sensor_data.hand_camera.rgb
+  - sensor_data.hand_camera.depth
+  - agent.qpos
+  - agent.qvel
+  
 train_dataset:
   _target_: odpc.data.imitation_dataset.ImitationDataset
   data_path: null
