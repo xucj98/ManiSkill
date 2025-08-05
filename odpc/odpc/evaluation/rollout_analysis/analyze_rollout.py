@@ -3,7 +3,7 @@ import json
 import h5py
 import pathlib
 from tqdm import tqdm
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 
 import cv2
 import numpy as np
@@ -18,6 +18,17 @@ from odpc.data.rollout_dataset import RolloutDataset
 from odpc.utils.utils import instantiate_from_config, parse_config_expr, save_h5_data
 from odpc.models.policy import BasePolicy
 from odpc.evaluation.rollout_analysis.key_frames_finder.base import BaseKeyFrameFinder
+
+
+class ImageSaver:
+    def __init__(self, save_dir: str):
+        self.save_dir = save_dir
+        self.index = 0
+        os.makedirs(self.save_dir, exist_ok=True)
+
+    def save_image(self, image: np.ndarray):
+        cv2.imwrite(os.path.join(self.save_dir, f"{self.index}.jpg"), image[:, :, ::-1])
+        self.index += 1
 
 
 def filter_failed_traj(
@@ -67,16 +78,15 @@ def concat_traj_data(
 
 
 def get_sample_data(
-        data: dict,
+        data: Union[dict, np.ndarray, torch.Tensor],
         indexes: any,
-) -> dict:
-    res = {}
-    for key, value in data.items():
-        if isinstance(value, dict):
-            res[key] = get_sample_data(value, indexes)
-        else:
-            res[key] = value[indexes]
-    return res
+) -> Union[dict, np.ndarray, torch.Tensor]:
+    if isinstance(data, dict):
+        return {key: get_sample_data(value, indexes) for key, value in data.items()}
+    elif isinstance(data, np.ndarray) or isinstance(data, torch.Tensor):
+        return data[indexes]
+    else:
+        raise ValueError(f"Invalid data type: {type(data)}")
 
 
 def sample_key_frames(
@@ -97,18 +107,19 @@ def sample_key_frames(
     return sample_idx
 
 def process_traj(
-        traj_key: str,
         traj_data: List[Dict],
         key_frame_finder: BaseKeyFrameFinder,
         sample_step: int,
         device: torch.device,
-        save_dir: Optional[pathlib.Path] = None,
+        image_saver: Optional[ImageSaver] = None,
 )->Tuple[Dict[str, list], Dict[str, np.ndarray]]:
     """
     处理单条（失败）轨迹，
         1. 拼接轨迹数据
         2. 找到关键帧
-        3. 采样关键帧数据，得到对应的 env_states 和 sensor_data
+        3. 采样关键帧数据，得到采样后的关键帧索引 sample_idx
+        4. 根据 sample_idx 采样 env_states 和 episode_seed
+        5. （可选）根据 sample_idx 采样 sensor_data 并保存图片
     """
     traj_data = concat_traj_data(traj_data)
     traj_data = common.to_tensor(traj_data, device)
@@ -120,10 +131,14 @@ def process_traj(
 
     sample_idx = sample_key_frames(key_frames, sample_step)
     key_frames["sample_idx"] = sample_idx
-    env_states = get_sample_data(traj_data["env_states"], sample_idx)
+
+    env_states = {
+        "env_states": get_sample_data(traj_data["env_states"], sample_idx),
+        "episode_seed": get_sample_data(traj_data["episode_seed"], sample_idx),
+    }
     env_states = common.to_numpy(env_states)
     
-    if save_dir is not None:
+    if image_saver is not None:
         sensor_data = get_sample_data(traj_data["observations"]["sensor_data"], sample_idx)
         sensor_names = [k for k in sensor_data if "rgb" in sensor_data[k]]
         for i in range(len(sensor_data[sensor_names[0]]["rgb"])):
@@ -134,9 +149,8 @@ def process_traj(
                 rgb = np.transpose(rgb, (1, 2, 0))  # [h, w, 3]
                 rgb = (rgb * 255).astype(np.uint8)
                 images.append(rgb)
-            images = np.concatenate(images, axis=1)  # Warning: 这里假设所有 sensor_data 的 rgb 维度相同
-            img_path = os.path.join(save_dir, f"{traj_key}_{sample_idx[i]}.jpg")
-            cv2.imwrite(img_path, images[:, :, ::-1])
+            image = np.concatenate(images, axis=1)  # Warning: 这里假设所有 sensor_data 的 rgb 维度相同
+            image_saver.save_image(image)
 
     return key_frames, env_states
 
@@ -148,8 +162,7 @@ def analyze_rollout(
     config.save_dir = parse_config_expr(config.save_dir)
     os.makedirs(config.save_dir, exist_ok=True)
     OmegaConf.save(config, os.path.join(config.save_dir, "config.yaml"))
-    if config.save_rgb:
-        os.makedirs(os.path.join(config.save_dir, "rgb"), exist_ok=True)
+    image_saver = ImageSaver(os.path.join(config.save_dir, "rgb")) if config.save_rgb else None
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -203,15 +216,14 @@ def analyze_rollout(
     for data in tqdm(dataloader, desc="Analyzing rollout"):
         if cur_traj_idx != data["traj_idx"]:
             if cur_traj_idx is not None:
-                traj_key = rollout_dataset.traj_info[cur_traj_idx][1]        
                 key_frames, env_states = process_traj(
-                    traj_key,
                     traj_data,
                     key_frame_finder,
                     config.key_frame_sample_step,
                     device,
-                    os.path.join(config.save_dir, "rgb") if config.save_rgb else None,
+                    image_saver,
                 )
+                traj_key = rollout_dataset.traj_info[cur_traj_idx][1]        
                 results[traj_key] = key_frames
                 key_env_states.append(env_states)
 
@@ -220,15 +232,14 @@ def analyze_rollout(
         traj_data.append(data)
 
     if cur_traj_idx is not None:
-        traj_key = rollout_dataset.traj_info[cur_traj_idx][1]
         key_frames, env_states = process_traj(
-            traj_key,
             traj_data,
             key_frame_finder,
             config.key_frame_sample_step,
             device,
-            os.path.join(config.save_dir, "rgb") if config.save_rgb else None,
+            image_saver,
         )
+        traj_key = rollout_dataset.traj_info[cur_traj_idx][1]
         results[traj_key] = key_frames
         key_env_states.append(env_states)
 
