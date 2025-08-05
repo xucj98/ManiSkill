@@ -118,6 +118,7 @@ def instantiate_from_config(config: DictConfig, **override_kwargs):
 
     return getattr(importlib.import_module(module), cls)(**params)
 
+
 def get_data_shape(
         data: Union[torch.Tensor, np.ndarray, h5py.Dataset, dict, h5py.Group], 
         min_max: bool = False, 
@@ -165,6 +166,7 @@ def expand_dim_to(
 
     return a
 
+
 def get_nested_value(data_structure: Union[dict, list], key_path: str):
     """
     从嵌套的字典或列表中根据点分隔的路径字符串获取值。
@@ -196,3 +198,18 @@ def get_nested_value(data_structure: Union[dict, list], key_path: str):
             )
             
     return current_data
+
+
+def save_h5_data(
+        data: dict,
+        file: Union[h5py.File, h5py.Group],
+) -> None:
+    for k, v in data.items():
+        if isinstance(v, np.ndarray):
+            file.create_dataset(k, data=v)
+        elif isinstance(v, torch.Tensor):
+            file.create_dataset(k, data=v.cpu().numpy())
+        elif isinstance(v, dict):
+            save_h5_data(v, file.create_group(k))
+        else:
+            raise ValueError(f"Unsupported type: {type(v)}")

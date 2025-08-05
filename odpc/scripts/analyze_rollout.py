@@ -3,7 +3,7 @@ import argparse
 from omegaconf import DictConfig, OmegaConf
 
 from odpc.evaluation.rollout_analysis import analyze_rollout
-from odpc.utils.utils import load_config_with_defaults, parse_config_expr
+from odpc.utils.utils import load_config_with_defaults
 
 
 def get_args():

@@ -5,10 +5,11 @@ act_horizon: 8
 pred_horizon: 16
 
 success_type: success_once # "success_once" or "success_at_end"
-cdf_alpha: 0.99
-patience: 2
 use_ema: true
 num_workers: 8
+
+key_frame_sample_step: 10
+save_rgb: true
 
 save_dir: runs/rollout_analysis/${exp_name}_[now:%Y%m%d_%H%M%S]
 ckpt_path: runs/NormalizeAction/PegIns_EeDeltaPose_HandCam_HoleSize5_Demo2k_NullNormalizer_20250717_183251/checkpoints/140000.pt

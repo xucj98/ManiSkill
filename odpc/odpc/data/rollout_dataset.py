@@ -49,6 +49,9 @@ class RolloutDataset(ImitationDataset):
         for obs_processor in self.obs_processors:
             obs = obs_processor.process(obs)
 
+        # 获取 env_states
+        env_states = self._get_slice_data(h5_file[f"{traj_key}/env_states"], start)
+
         act = self._get_slice_data(h5_file[f"{traj_key}/obs/extra"], slice(start, end + 1))
         for key in act.keys():
             act[key] = utils.expand_dim_to(act[key], 0, self.pred_horizon + 1)
@@ -62,6 +65,7 @@ class RolloutDataset(ImitationDataset):
                 sensor[modality] = np.transpose(data, (0, 3, 1, 2))
 
         return {
+            "env_states": env_states,
             "observations": obs,
             "actions": act["actions"],
             "traj_idx": traj_idx,

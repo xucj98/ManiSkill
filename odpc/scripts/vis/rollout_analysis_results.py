@@ -23,6 +23,7 @@ if __name__ == "__main__":
 
     analysis_results = json.load(open(args.result_path))
     with h5py.File(rollout_path, "r") as f:
+        print("Total trajectories: ", len(analysis_results))
         for traj_key, result in analysis_results.items():
             print(f"Visualizing trajectory: {traj_key}")
             traj_data = f[traj_key]
