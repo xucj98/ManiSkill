@@ -54,6 +54,8 @@ def run_expert_from_stage(env, start_stage: str, planner: PandaArmMotionPlanning
         reach_pose = planner.grasp_pose * sapien.Pose([0, 0, -0.05])
         res = planner.move_to_pose_with_screw(reach_pose)
         if res == -1: return -1
+        res = planner.move_to_pose_with_screw(planner.grasp_pose)
+        if res == -1: return -1
         planner.close_gripper()
         current_stage = "LIFT"
 
@@ -143,7 +145,7 @@ def main():
     stage = detect_current_stage(env.unwrapped, 0)
     print(f"[*] 检测到阶段: {stage}")
 
-    planner = PandaArmMotionPlanningSolver(env, debug=False, vis=args.vis, base_pose=env.unwrapped.agent.robot.pose)
+    planner = PandaArmMotionPlanningSolver(env, debug=False, vis=args.vis, base_pose=env.unwrapped.agent.robot.pose, print_env_info=False)
 
     FINGER_LENGTH = 0.025
     obb = get_actor_obb(env.unwrapped.peg)
