@@ -8,7 +8,7 @@ from omegaconf import DictConfig, OmegaConf
 from typing import Dict, Optional
 
 import gymnasium as gym
-from mani_skill.utils import common
+from mani_skill.utils import common, gym_utils
 
 from odpc.data.data_conversion import pose_multiply, DataConversion
 from odpc.models.agent import BaseAgent
@@ -18,10 +18,21 @@ from odpc.utils.utils import instantiate_from_config
 
 
 def evaluate_on_env(
-        n: int, agent: BaseAgent, eval_envs, device, sim_backend: str, progress_bar: bool = True
+        n: int, 
+        agent: BaseAgent, 
+        eval_envs: gym.Env, 
+        device: torch.device, 
+        sim_backend: str, 
+        progress_bar: bool = True,
 )-> Dict[str, np.ndarray]:
+    # if progress_bar:
+        # pbar = tqdm(total=n)
+    
+    num_envs = eval_envs.num_envs
+    max_episode_steps = gym_utils.find_max_episode_steps_value(eval_envs)
     if progress_bar:
-        pbar = tqdm(total=n)
+        pbar = tqdm(total=n // num_envs * max_episode_steps)
+
     with torch.no_grad():
         eval_metrics = defaultdict(list)
         obs, info = eval_envs.reset()
@@ -34,6 +45,8 @@ def evaluate_on_env(
                 action_seq = action_seq.cpu().numpy()
             for i in range(action_seq.shape[1]):
                 obs, rew, terminated, truncated, info = eval_envs.step(action_seq[:, i])
+                if progress_bar:
+                    pbar.update(1)
                 if truncated.any():
                     break
             if truncated.any():
@@ -46,8 +59,8 @@ def evaluate_on_env(
                         for k, v in final_info["episode"].items():
                             eval_metrics[k].append(v)
                 eps_count += eval_envs.num_envs
-                if progress_bar:
-                    pbar.update(eval_envs.num_envs)
+                # if progress_bar:
+                #     pbar.update(eval_envs.num_envs)
                 obs, info = eval_envs.reset()
                 if eps_count < n:
                     agent.reset(obs, channel_last=True)
