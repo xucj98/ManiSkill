@@ -20,6 +20,7 @@ from mani_skill.trajectory.merge_trajectory import merge_trajectories
 from mani_skill.examples.motionplanning.panda.motionplanner import PandaArmMotionPlanningSolver, OPEN, CLOSED
 from mani_skill.examples.motionplanning.panda.utils import (
     compute_grasp_info_by_obb, get_actor_obb)
+from mani_skill.utils import common
 
 # =====================================================================================
 # Core Expert Logic (Copied from your debugged script)
@@ -136,8 +137,34 @@ def _main(args, proc_id: int, indices_to_process: list):
         env.reset(seed=seed, options=dict(reconfigure=True))
         env.unwrapped.set_state_dict(state_dict)
 
+        # 更新 RecordEpisode 中记录的初始状态和观测
+        # 因为 RecordEpisode 在 reset 时已经记录了初始状态，但我们在 reset 后又修改了状态
+        # 所以需要手动更新 RecordEpisode 的记录
+        if hasattr(env, '_trajectory_buffer') and env._trajectory_buffer is not None:
+            # 更新环境状态记录
+            def recursive_replace(x, y):
+                if isinstance(x, np.ndarray):
+                    x[-1, :] = y[-1, :]
+                else:
+                    for k in x.keys():
+                        recursive_replace(x[k], y[k])
+
+            # 更新状态记录
+            if env.record_env_state:
+                recursive_replace(
+                    env._trajectory_buffer.state, 
+                    common.to_numpy(common.batch(state_dict))
+                )
+            
+            # 更新观测记录
+            updated_obs = env.base_env.get_obs()
+            recursive_replace(
+                env._trajectory_buffer.observation,
+                common.to_numpy(common.batch(updated_obs))
+            )
+
         # 通过一次step更新物理仿真器的状态，为后续计算 is_grasp 做准备
-        # Warning: 这个 step 会导致初始的状态和 env_states 中的状态不一致
+        # Warning: 这个 step 的 action 可能是有问题的
         current_qpos = env.unwrapped.agent.robot.get_qpos()
         action = torch.cat([current_qpos[:, :7], current_qpos[:, 7:8]], dim=1)
         env.unwrapped.agent.set_action(action)

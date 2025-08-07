@@ -11,6 +11,7 @@ demos/
 wandb/
 analysis_outputs/
 vis_output/
+outputs/
 
 # ipython/jupyter notebooks
 # *.ipynb
