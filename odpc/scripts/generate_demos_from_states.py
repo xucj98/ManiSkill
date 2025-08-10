@@ -211,13 +211,14 @@ def _main(args, proc_id: int, indices_to_process: list):
                 env.flush_video()
 
         pbar.update(1)
-        pbar.set_postfix(
-            dict(
-                success_rate=np.mean(successes),
-                avg_episode_length=np.mean(solution_episode_lengths),
-                max_episode_length=np.max(solution_episode_lengths),
+        if len(solution_episode_lengths) > 0:
+            pbar.set_postfix(
+                dict(
+                    success_rate=np.mean(successes),
+                    avg_episode_length=np.mean(solution_episode_lengths),
+                    max_episode_length=np.max(solution_episode_lengths),
+                )
             )
-        )
 
     env.close()
     return output_h5_path
