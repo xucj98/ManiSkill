@@ -30,12 +30,12 @@ def detect_current_stage(env, env_idx: int) -> str:
     """Detects stage based on the official is_grasping method."""
     ALIGN_THRESH_XY = 0.03
     LIFT_CLEARANCE_Z = 0.015
-    is_grasped = env.agent.is_grasping(env.peg)[env_idx]
+    is_grasped = env.unwrapped.agent.is_grasping(env.unwrapped.peg)[env_idx]
     if not is_grasped:
         return "INITIAL"
-    peg_p = env.peg.pose.p[env_idx].squeeze(0)
-    goal_p = env.goal_pose.p[env_idx].squeeze(0)
-    initial_peg_z = env.peg_half_sizes[env_idx, 2]
+    peg_p = env.unwrapped.peg.pose.p[env_idx].squeeze(0)
+    goal_p = env.unwrapped.goal_pose.p[env_idx].squeeze(0)
+    initial_peg_z = env.unwrapped.peg_half_sizes[env_idx, 2]
     is_lifted = peg_p[2] > (initial_peg_z + LIFT_CLEARANCE_Z)
     if not is_lifted:
         return "LIFT"
@@ -68,20 +68,20 @@ def run_expert_from_stage(env, start_stage: str, planner: PandaArmMotionPlanning
         if res == -1: return -1
         current_stage = "ALIGN"
 
-    ee_cur_pose = env.agent.tcp.pose
+    ee_cur_pose = env.unwrapped.agent.tcp.pose
 
     if current_stage == "ALIGN":
-        offset = 0.01 + env.peg_half_sizes[0, 0].item()
-        fine_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0])
+        offset = 0.01 + env.unwrapped.peg_half_sizes[0, 0].item()
+        fine_insert_pose = env.unwrapped.goal_pose * sapien.Pose([-offset, 0, 0])
         for _ in range(3):
-            delta_pose = fine_insert_pose * env.peg.pose.inv()
+            delta_pose = fine_insert_pose * env.unwrapped.peg.pose.inv()
             ee_cur_pose = delta_pose * ee_cur_pose
             res = planner.move_to_pose(ee_cur_pose)
             if res == -1: return -1
         current_stage = "INSERT"
 
     if current_stage == "INSERT":
-        delta_pose = env.goal_pose * sapien.Pose([0.00, 0, 0]) * env.peg.pose.inv()
+        delta_pose = env.unwrapped.goal_pose * sapien.Pose([0.00, 0, 0]) * env.unwrapped.peg.pose.inv()
         ee_cur_pose = delta_pose * ee_cur_pose
         res = planner.move_to_pose(ee_cur_pose)
         if res == -1: return -1
