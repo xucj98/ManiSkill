@@ -1,0 +1,16 @@
+traj_name: "PegIns_EeDeltaPose_HandCam_HoleSize5_Dagger1k"
+obs_mode: "rgbd"
+control_mode: "pd_ee_delta_pose"
+num_procs: 10
+jpg_quality: 90
+seed: 0
+save_dir: demos
+
+motion_planning_args:
+  analysis_dir: runs/rollout_analysis/PegIns_LastFramesFinder_20250806_184518/
+  output_dir: ${save_dir}
+  traj_name: ${traj_name}
+  num_procs: ${num_procs}
+  vis: False
+  save_video: False
+  only_count_success: True
