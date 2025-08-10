@@ -14,13 +14,13 @@ import multiprocessing as mp
 from copy import deepcopy
 from tqdm import tqdm
 
-import odpc.envs
 from mani_skill.utils.wrappers import RecordEpisode
 from mani_skill.trajectory.merge_trajectory import merge_trajectories
-from mani_skill.examples.motionplanning.panda.motionplanner import PandaArmMotionPlanningSolver, OPEN, CLOSED
-from mani_skill.examples.motionplanning.panda.utils import (
-    compute_grasp_info_by_obb, get_actor_obb)
+from mani_skill.examples.motionplanning.panda.utils import compute_grasp_info_by_obb, get_actor_obb
 from mani_skill.utils import common
+
+import odpc.envs
+from odpc.data.demo.motionplanner import PandaArmMotionPlanningClipSolver
 
 # =====================================================================================
 # Core Expert Logic (Copied from your debugged script)
@@ -45,44 +45,45 @@ def detect_current_stage(env, env_idx: int) -> str:
     else:
         return "ALIGN"
 
-def run_expert_from_stage(env, start_stage: str, planner: PandaArmMotionPlanningSolver):
+def run_expert_from_stage(env, start_stage: str, planner: PandaArmMotionPlanningClipSolver):
     """Exactly mimics the logic from the original solve() function."""
     current_stage = start_stage
 
     if current_stage != "INITIAL":
-        planner.gripper_state = CLOSED
-
+        planner.close_gripper()
+    else:
+        planner.open_gripper()
     if current_stage == "INITIAL":
         reach_pose = planner.grasp_pose * sapien.Pose([0, 0, -0.05])
-        res = planner.move_to_pose_with_screw(reach_pose)
+        res = planner.move_to_pose(reach_pose)
         if res == -1: return -1
-        res = planner.move_to_pose_with_screw(planner.grasp_pose)
+        res = planner.move_to_pose(planner.grasp_pose)
         if res == -1: return -1
         planner.close_gripper()
         current_stage = "LIFT"
 
     if current_stage == "LIFT":
         reach_pose = planner.grasp_pose * sapien.Pose([0, 0, -0.05])
-        res = planner.move_to_pose_with_screw(reach_pose)
+        res = planner.move_to_pose(reach_pose)
         if res == -1: return -1
         current_stage = "ALIGN"
 
-    ee_cur_pose = env.unwrapped.agent.tcp.pose
+    ee_cur_pose = env.agent.tcp.pose
 
     if current_stage == "ALIGN":
-        offset = 0.01 + env.unwrapped.peg_half_sizes[0, 0].item()
-        fine_insert_pose = env.unwrapped.goal_pose * sapien.Pose([-offset, 0, 0])
+        offset = 0.01 + env.peg_half_sizes[0, 0].item()
+        fine_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0])
         for _ in range(3):
-            delta_pose = fine_insert_pose * env.unwrapped.peg.pose.inv()
+            delta_pose = fine_insert_pose * env.peg.pose.inv()
             ee_cur_pose = delta_pose * ee_cur_pose
-            res = planner.move_to_pose_with_screw(ee_cur_pose)
+            res = planner.move_to_pose(ee_cur_pose)
             if res == -1: return -1
         current_stage = "INSERT"
 
     if current_stage == "INSERT":
-        delta_pose = env.unwrapped.goal_pose * sapien.Pose([0.03, 0, 0]) * env.unwrapped.peg.pose.inv()
+        delta_pose = env.goal_pose * sapien.Pose([0.00, 0, 0]) * env.peg.pose.inv()
         ee_cur_pose = delta_pose * ee_cur_pose
-        res = planner.move_to_pose_with_screw(ee_cur_pose)
+        res = planner.move_to_pose(ee_cur_pose)
         if res == -1: return -1
 
     return res
@@ -173,7 +174,7 @@ def _main(args, proc_id: int, indices_to_process: list):
         stage = detect_current_stage(env.unwrapped, 0)
         
         # 注意：在多进程中，可视化通常是关闭的
-        planner = PandaArmMotionPlanningSolver(
+        planner = PandaArmMotionPlanningClipSolver(
             env, 
             debug=False, 
             vis=args.vis, 
@@ -199,7 +200,7 @@ def _main(args, proc_id: int, indices_to_process: list):
             elapsed_steps = res[-1]["elapsed_steps"].item()
             solution_episode_lengths.append(elapsed_steps)
         successes.append(success)
-
+        
         if args.only_count_success and not success:
             env.flush_trajectory(save=False)
             if args.save_video:
