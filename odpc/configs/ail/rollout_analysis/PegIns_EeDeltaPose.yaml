@@ -5,20 +5,13 @@ act_horizon: 8
 pred_horizon: 16
 
 success_type: success_once # "success_once" or "success_at_end"
-cdf_alpha: 0.99
-patience: 2
 use_ema: true
 num_workers: 8
-batch_size: 64
 
-ood_finder:
-  _target_: odpc.evaluation.ood_finder.diffusion_loss_finder.DiffusionLossOODFinder
-  cdf_alpha: ${cdf_alpha}
-  patience: ${patience}
-  n_timesteps: 4  # 对于每个 (obs, act) 样本，计算 n * timesteps 个 diffusion loss，然后取平均
-  batch_size: ${batch_size}
-  num_workers: ${num_workers}
+key_frame_sample_step: 30
+save_rgb: true
 
+save_dir: runs/rollout_analysis/${exp_name}_[now:%Y%m%d_%H%M%S]
 ckpt_path: runs/PegIns_EeDeltaPose_NumTraj/PegIns_EeDeltaPose_NumTraj2k_20250613_170325/checkpoints/200000.pt
 rollout_path: runs/PegIns_EeDeltaPose/PegIns_EeDeltaPose_Rollout_20250721_152531/rollout_traj.h5
 data_paths: 
@@ -31,6 +24,10 @@ obs_processor_configs:
   - _target_: odpc.data.obs_processors.SimpleNormalizeProcessor
 
 act_processor_configs: []
+
+key_frame_finder:
+  _target_: odpc.evaluation.rollout_analysis.LastFramesFinder
+  num_last_frames: 10
 
 train_dataset:
   _target_: odpc.data.imitation_dataset.ImitationDataset

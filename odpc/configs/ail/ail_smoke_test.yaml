@@ -7,13 +7,16 @@ defaults:
   - demo: PegIns_EeDeltaPose
   - train: PegIns_EeDeltaPose
   - rollout: PegIns_EeDeltaPose
+  - rollout_analysis: PegIns_EeDeltaPose
+  - demo_from_state: PegIns_EeDeltaPose
   - _self_
 
 # ============================================================================
 # 基础信息
 # ============================================================================
 project_name: "ail_smoke_test"
-num_procs: 5
+num_procs: 2
+num_envs: 5
 seed: 42
 output_dir: runs/${project_name}_[now:%Y%m%d_%H%M%S]
 
@@ -22,7 +25,7 @@ output_dir: runs/${project_name}_[now:%Y%m%d_%H%M%S]
 # ============================================================================
 ail_loop:
   num_cycles: 2  # A-IL 循环的总次数 (不包括 Cycle 0)
-  rollout_episodes_per_cycle: 10  # 每轮策略部署收集的 episode 数量
+  rollout_episodes_per_cycle: 20  # 每轮策略部署收集的 episode 数量
   targeted_demos_per_cycle: 10  # 每轮生成的靶向性演示数量
 
 
@@ -35,17 +38,22 @@ demo:
   num_procs: ${num_procs}
   seed: ${seed}
 
+demo_from_state:
+  traj_name: "smoke_test_traj"
+  num_procs: ${num_procs}
+  seed: ${seed}
+
 
 # ============================================================================
 # 策略训练配置
 # ============================================================================
 train:
   wandb_group: "AIL_Smoke_Test"
-  num_envs: ${num_procs}
+  num_envs: ${num_envs}
   seed: ${seed}
 
   trainer: 
-    total_iters: 110
+    total_iters: 60
     save_freq: 50
     eval_freq: 50
     log_freq: 10
@@ -55,17 +63,17 @@ train:
       num_traj: null
 
   evaluator:
-    num_eval_episodes: 10
+    num_eval_episodes: 5
     dataset_configs: null
 
 
 rollout:
   wandb_group: "AIL_Smoke_Test"
-  num_envs: ${num_procs}
+  num_envs: ${num_envs}
   seed: ${seed}
 
   evaluator:
-    num_eval_episodes: 10
+    num_eval_episodes: ${ail_loop.rollout_episodes_per_cycle}
   
 # ============================================================================
 # 靶向性演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path!=None)
@@ -83,12 +91,5 @@ targeted_demo_generation:
 # ============================================================================
 # 离线分析配置 (Phase 4)
 # ============================================================================
-offline_analysis:
-  # 每轮要识别的高价值状态数量
-  num_high_value_states: ${ail_loop.targeted_demos_per_cycle}
-  # 失败定位阈值
-  failure_threshold: 0.9
-  # 不确定性排序方法
-  uncertainty_metric: "variance"
-  # 多样性采样参数
-  diversity_sampling_method: "random"
+rollout_analysis:
+  num_workers: ${num_procs}

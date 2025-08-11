@@ -148,7 +148,8 @@ def solve_from_stage(
         env, 
         seed: int = None, 
         debug: bool = False, 
-        vis: bool = False
+        vis: bool = False,
+        clip_steps: int = 100,
 ):    
     planner = PandaArmMotionPlanningClipSolver(
         env, 
@@ -159,6 +160,7 @@ def solve_from_stage(
         print_env_info=False,
         joint_vel_limits=0.75,
         joint_acc_limits=0.75,
+        clip_steps=clip_steps,
     )
 
     env: PegInsertionSideV2Env = env.unwrapped

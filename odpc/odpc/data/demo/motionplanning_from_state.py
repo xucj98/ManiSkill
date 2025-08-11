@@ -1,6 +1,7 @@
 
 #!/usr/bin/env python3
 
+import json
 import gymnasium as gym
 import h5py
 import torch
@@ -40,6 +41,10 @@ def _main(args, proc_id: int, indices_to_process: list):
     output_h5_path = env._h5_file.filename
 
     solve = MP_SOLUTIONS[env_id]
+    if hasattr(args, "solve_kwargs"):
+        solve_kwargs = args.solve_kwargs
+    else:
+        solve_kwargs = {}
 
     pbar = tqdm(indices_to_process, desc=f"Process {proc_id}")
     successes = []
@@ -92,7 +97,7 @@ def _main(args, proc_id: int, indices_to_process: list):
         env.unwrapped.scene.step()
 
         try:
-            res = solve(env=env, seed=seed, debug=False, vis=args.vis)
+            res = solve(env=env, seed=seed, debug=False, vis=args.vis, **solve_kwargs)
         except Exception as e:
             print(f"Episode {process_index} failed: {e}")
             res = -1
@@ -140,11 +145,14 @@ def get_args():
     parser.add_argument("--vis", action="store_true", help="开启交互式可视化调试（仅在 num-procs=1 时有效）。")
     parser.add_argument("--save-video", action="store_true", help="保存视频轨迹。")
     parser.add_argument("--only-count-success", action="store_true", help="仅统计成功轨迹。")
+    parser.add_argument("--solve-kwargs", type=str, default="{}", help="传递给专家策略的额外参数。")
     args = parser.parse_args()
 
     if args.vis and args.num_procs > 1:
         print("[!] [警告] 可视化模式不支持多进程，将强制使用单进程。")
         args.num_procs = 1
+    
+    args.solve_kwargs = json.loads(args.solve_kwargs)
 
     return args
 

@@ -56,6 +56,7 @@ def filter_failed_traj(
                 failed_traj_keys.append(traj_key)
 
         print(f"Success trajectories: {len(success_traj_keys)}/{len(f.keys())}")
+        print(f"Failed trajectories: {len(failed_traj_keys)}/{len(f.keys())}")
 
     return failed_traj_keys
 
@@ -254,4 +255,4 @@ def analyze_rollout(
         json.dump(results, f)
     print(f"Rollout analysis results saved to {result_path}")
 
-    return result_path
+    return key_env_states_path

@@ -17,28 +17,12 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 from odpc.data.demo.generation import run_generation_workflow
+from odpc.data.demo.generation_from_state import run_generation_workflow as generation_from_state
 from odpc.training.train import train
 from odpc.evaluation.rollout import rollout
+from odpc.evaluation.rollout_analysis import analyze_rollout
 
 from odpc.utils.utils import load_config_with_defaults, parse_config_expr
-
-
-
-def _create_dummy_h5_traj(h5_path: pathlib.Path, num_traj: int = 1, traj_len: int = 2):
-    """创建一个虚拟的、结构合法的HDF5轨迹文件。"""
-    with h5py.File(h5_path, "w") as f:
-        for i in range(num_traj):
-            traj_group = f.create_group(f"traj_{i}")
-            # (T, action_dim)
-            traj_group.create_dataset("actions", data=np.random.rand(traj_len, 7).astype(np.float32))
-            obs_group = traj_group.create_group("obs")
-            extra_group = obs_group.create_group("extra")
-            # (T+1, 7)
-            extra_group.create_dataset("peg_pose", data=np.random.rand(traj_len + 1, 7).astype(np.float32))
-            sensor_group = obs_group.create_group("sensor_data")
-            camera_group = sensor_group.create_group("base_camera")
-            # (T+1, H, W, C)
-            camera_group.create_dataset("rgb", data=np.random.randint(0, 256, (traj_len + 1, 128, 128, 3), dtype=np.uint8))
 
 
 def setup_logging(cycle_dir: pathlib.Path):
@@ -54,7 +38,11 @@ def setup_logging(cycle_dir: pathlib.Path):
     logging.info(f"日志记录已初始化。日志文件: {cycle_dir / 'ail_cycle.log'}")
 
 
-def generate_expert_demos(config: DictConfig, output_dir: pathlib.Path, initial_states_path: Optional[pathlib.Path] = None) -> pathlib.Path:
+def generate_expert_demos(
+    config: DictConfig,
+    output_dir: pathlib.Path,
+    initial_states_path: Optional[pathlib.Path] = None,
+) -> pathlib.Path:
     """
     阶段 1 & 5: 生成专家演示。
     根据 `initial_states_path` 是否为 None，决定是生成初始演示还是靶向性演示。
@@ -74,25 +62,28 @@ def generate_expert_demos(config: DictConfig, output_dir: pathlib.Path, initial_
         demo_config = config.demo
         demo_config.save_dir = str(output_dir)
 
-        generated_path_str = run_generation_workflow(cfg=demo_config)
-        
-        # 直接使用生成的文件路径，不进行重命名
-        demo_path = pathlib.Path(generated_path_str)
-
+        generated_path = run_generation_workflow(cfg=demo_config)
+       
     else:
         logging.info(f"阶段 5: 正在从高价值状态 {initial_states_path} 生成靶向性演示...")
-        # TODO: 实现加载高价值状态并辅助专家采集的逻辑。
-        #       这需要一个新的函数，它能接收 initial_states_path 并将其内容传递给数据生成流程。
-        #       暂时创建一个虚拟文件。
-        demo_name = "targeted_demos.h5"
-        demo_path = output_dir / demo_name
-        _create_dummy_h5_traj(demo_path, num_traj=config.ail_loop.targeted_demos_per_cycle)
 
-    logging.info(f"演示已保存至: {demo_path}")
-    return demo_path
+        analysis_dir = initial_states_path.parent
+
+        demo_config = config.demo_from_state
+        demo_config.save_dir = str(output_dir)
+        demo_config.motion_planning_args.analysis_dir = str(analysis_dir)
+
+        generated_path = generation_from_state(cfg=demo_config)
+       
+    logging.info(f"演示已保存至: {generated_path}")
+    return pathlib.Path(generated_path)
 
 
-def train_policy(config: DictConfig, dataset_paths: List[pathlib.Path], output_dir: pathlib.Path) -> pathlib.Path:
+def train_policy(
+    config: DictConfig,
+    dataset_paths: List[pathlib.Path],
+    output_dir: pathlib.Path,
+) -> pathlib.Path:
     """
     阶段 2 & 6: 在给定数据集上训练策略模型。
     对应 `scripts/train_policy.py` 并调用 `odpc.training.trainer`。
@@ -119,7 +110,11 @@ def train_policy(config: DictConfig, dataset_paths: List[pathlib.Path], output_d
     return model_ckpt_path
 
 
-def policy_rollout(config: DictConfig, output_dir: pathlib.Path, policy_ckpt_path: pathlib.Path) -> pathlib.Path:
+def policy_rollout(
+        config: DictConfig,
+        output_dir: pathlib.Path,
+        policy_ckpt_path: pathlib.Path,
+) -> pathlib.Path:
     """
     阶段 3: 在环境中部署当前策略以收集轨迹。
 
@@ -142,7 +137,13 @@ def policy_rollout(config: DictConfig, output_dir: pathlib.Path, policy_ckpt_pat
     return rollout_log_path
 
 
-def offline_analysis(config: DictConfig, cycle_dir: pathlib.Path, rollout_log_path: pathlib.Path) -> pathlib.Path:
+def offline_analysis(
+    config: DictConfig,
+    output_dir: pathlib.Path,
+    rollout_log_path: pathlib.Path,
+    dataset_paths: List[pathlib.Path],
+    ckpt_path: pathlib.Path,
+) -> pathlib.Path:
     """
     阶段 4: 分析部署日志，以识别用于下一轮的高价值状态。
 
@@ -155,16 +156,17 @@ def offline_analysis(config: DictConfig, cycle_dir: pathlib.Path, rollout_log_pa
         识别出的高价值状态列表的路径 (HighValueStateList 格式)。
     """
     logging.info(f"阶段 4: 正在对日志进行离线分析: {rollout_log_path}")
-    high_value_states_path = cycle_dir / "high_value_states.pkl"
+    
+    analysis_config = config.rollout_analysis
+    analysis_config.save_dir = str(output_dir)
+    analysis_config.ckpt_path = str(ckpt_path)
+    analysis_config.rollout_path = str(rollout_log_path)
+    analysis_config.data_paths = [str(p) for p in dataset_paths]
 
-    # TODO: 实现 A-IL 的核心逻辑:
-    # 1. 筛选失败/次优轨迹。
-    # 2. 根据不确定性/影响力对状态进行排序。
-    # 3. 采样一个多样化的高价值状态集合。
-    high_value_states_path.touch()
+    key_env_states_path = analyze_rollout(config=analysis_config)
 
-    logging.info(f"高价值状态已保存至: {high_value_states_path}")
-    return high_value_states_path
+    logging.info(f"离线分析结果已保存至: {key_env_states_path}")
+    return key_env_states_path
 
 
 def main(args, cfg):
@@ -212,17 +214,24 @@ def main(args, cfg):
         logging.info("=" * 50)
 
         # 阶段 3: 策略部署
-        rollout_log_path = policy_rollout(cfg, cycle_dir / "rollout", policy_ckpt_path)
+        rollout_log_path = policy_rollout(
+            cfg, cycle_dir / "rollout", policy_ckpt_path
+        )
 
         # 阶段 4: 离线分析
-        high_value_states_path = offline_analysis(cfg, cycle_dir, rollout_log_path)
+        key_env_states_path = offline_analysis(
+            cfg, cycle_dir / "rollout_analysis", rollout_log_path, 
+            aggregated_dataset_paths, policy_ckpt_path
+        )
 
         # 阶段 5: 靶向性演示
-        targeted_demos_path = generate_expert_demos(cfg, cycle_dir, initial_states_path=high_value_states_path)
+        targeted_demos_path = generate_expert_demos(
+            cfg, cycle_dir, initial_states_path=key_env_states_path
+        )
 
         # 阶段 6: 聚合与再训练
         aggregated_dataset_paths.append(targeted_demos_path) # 直接追加
-        policy_ckpt_path = train_policy(cfg, aggregated_dataset_paths, cycle_dir)
+        policy_ckpt_path = train_policy(cfg, aggregated_dataset_paths, cycle_dir / "train")
 
         logging.info(f"已完成 A-IL 第 {i} 轮。当前策略: {policy_ckpt_path}")
 
