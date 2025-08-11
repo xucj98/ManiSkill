@@ -1,0 +1,82 @@
+# odpc/configs/ail/ail_smoke_test_merged.yaml
+# A-IL 框架冒烟测试的完整配置文件
+# 该配置整合了所有子模块的配置，提供完整的端到端测试流程
+# 使用极小的数据量和计算量，旨在快速验证整个 A-IL 流程的正确性
+
+defaults:
+  - demo: PegIns_EeDeltaPose
+  - train: PegIns_EeDeltaPose
+  - rollout: PegIns_EeDeltaPose
+  - rollout_analysis: PegIns_EeDeltaPose
+  - demo_from_state: PegIns_EeDeltaPose
+  - _self_
+
+# ============================================================================
+# 基础信息
+# ============================================================================
+project_name: "ail_PegIns"
+num_procs: 10
+num_envs: 100
+seed: 42
+output_dir: runs/${project_name}_[now:%Y%m%d_%H%M%S]
+
+# ============================================================================
+# A-IL 主循环配置
+# ============================================================================
+ail_loop:
+  num_cycles: 2  # A-IL 循环的总次数 (不包括 Cycle 0)
+  rollout_episodes_per_cycle: 400  # 每轮策略部署收集的 episode 数量
+  targeted_demos_per_cycle: 200  # 每轮生成的靶向性演示数量
+
+
+# ============================================================================
+# 初始演示生成配置 (用于 generate_expert_demos 阶段的 initial_states_path=None)
+# ============================================================================
+demo:
+  num_traj: ${ail_loop.targeted_demos_per_cycle}
+  traj_name: "smoke_test_traj"
+  num_procs: ${num_procs}
+  seed: ${seed}
+
+demo_from_state:
+  traj_name: "smoke_test_traj"
+  num_procs: ${num_procs}
+  seed: ${seed}
+
+
+# ============================================================================
+# 策略训练配置
+# ============================================================================
+train:
+  wandb_group: "AIL_PegIns"
+  num_envs: ${num_envs}
+  seed: ${seed}
+
+  trainer: 
+    total_iters: 80000
+    save_freq: 10000
+    eval_freq: 10000
+    log_freq: 1000
+    num_dataload_workers: 8
+
+    train_dataset:
+      num_traj: null
+
+  evaluator:
+    num_eval_episodes: 100
+    dataset_configs: null
+
+
+rollout:
+  wandb_group: "AIL_PegIns"
+  num_envs: ${num_envs}
+  seed: ${seed}
+
+  evaluator:
+    num_eval_episodes: ${ail_loop.rollout_episodes_per_cycle}
+
+# ============================================================================
+# 离线分析配置 (Phase 4)
+# ============================================================================
+rollout_analysis:
+  num_workers: ${num_procs}
