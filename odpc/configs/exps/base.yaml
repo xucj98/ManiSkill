@@ -76,7 +76,7 @@ model:
     clip_sample: true
     prediction_type: "epsilon"
   action_normalizer_config:
-    _target_: odpc.models.modules.normalizer.MinMaxNormalizer
+    _target_: odpc.models.modules.normalizer.NullNormalizer
     input_dim: ${model.output_dim}
 
 evaluator:

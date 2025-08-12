@@ -98,6 +98,10 @@ def train(cfg: DictConfig):
 
     model: BasePolicy = instantiate_from_config(cfg.model).to(device)
     
+    if cfg.get("finetune_from_ckpt_path", None) is not None:
+        ckpt = torch.load(cfg.finetune_from_ckpt_path)
+        model.load_state_dict(ckpt["model"])
+
     optimizer = instantiate_from_config(cfg.optimizer, params=model.parameters())
     lr_scheduler = instantiate_from_config(cfg.lr_scheduler, optimizer=optimizer)
     
