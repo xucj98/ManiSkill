@@ -1,0 +1,58 @@
+defaults:
+  - base
+  - _self_
+  
+exp_name: "HoleSize5_Demo2k"
+
+wandb_group: "PegIns_EeDeltaPose_HandCam_State"
+
+data_path: demos/PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal200.rgb+depth.pd_ee_delta_pose.physx_cpu.compressed.h5
+
+train_dataset:
+  num_traj: 7800
+
+used_obs:
+  - sensor_data.base_camera.rgb
+  - sensor_data.base_camera.depth
+  - sensor_data.hand_camera.rgb
+  - sensor_data.hand_camera.depth
+  - agent.qpos
+  - agent.qvel
+  - extra.tcp_pose
+
+model:
+  visual_encoder_config:
+    obs_meta:
+      base_camera:
+        type: rgbd
+        rgb: sensor_data.base_camera.rgb
+        depth: sensor_data.base_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 128
+      hand_camera:
+        type: rgbd
+        rgb: sensor_data.hand_camera.rgb
+        depth: sensor_data.hand_camera.depth
+        shape: [1, 4, 256, 256]
+        output_dim: 128
+  state_encoder_config:
+    _target_: odpc.models.state.IdentityStateEncoder
+    obs_meta:
+      poses:
+        type: stack_state
+        states: 
+          - agent.qpos
+          - agent.qvel
+          - extra.tcp_pose
+        shape: [1, 25]
+        output_dim: 25  
+  noise_pred_net_config:
+    global_cond_dim: 281
+
+evaluator:
+  env_configs:
+    ind:
+      env:
+        env_kwargs:
+          robot_uids: panda_peg_insertion
+          clearance: 0.005
