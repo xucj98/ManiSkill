@@ -1,12 +1,11 @@
-import h5py
-import numpy as np
-import open3d as o3d
-import torch
-import pytorch3d.ops as torch3d_ops
 import cv2
-from tqdm import tqdm
+import h5py
 import argparse
+import numpy as np
+from omegaconf import OmegaConf
+from tqdm import tqdm
 import time
+
 from odpc.data.utils import create_point_cloud, batch_farthest_point_sampling
 
 def decode_jpeg(jpeg_bytes):
@@ -64,6 +63,7 @@ def main(args):
     total_time = time.time() - t_start
     print(f"\nConversion complete. Total time: {total_time:.2f}s")
 
+    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Convert H5 dataset to DP3 point cloud format with trajectory structure.")
     parser.add_argument('--input_file', type=str, default='PegIns_EeDeltaPose_HandCam_HoleSize5_DemoVal200.rgb+depth.pd_ee_delta_pose.physx_cpu.compressed.h5')
@@ -72,4 +72,12 @@ if __name__ == '__main__':
     parser.add_argument('--num_trajectories', type=int, default=-1, help='Number of trajectories to process. Set to -1 for all.')
     parser.add_argument('--crop_range', nargs=6, type=float, default=[-1.0, 1.0, -1.0, 1.0, -0.1, 1.0], help='Final workspace crop range.')
     args = parser.parse_args()
+
+    demo_config_path = args.input_file.replace('.compressed', '').replace('.h5', '.yaml')
+    with open(demo_config_path, 'r') as f:
+        demo_config = OmegaConf.load(f)
+    demo_config.sparse_pointcloud = dict(num_points=args.num_points, crop_range=args.crop_range)
+    output_config_path = args.output_file.replace('.h5', '.yaml')
+    OmegaConf.save(demo_config, output_config_path)
+
     main(args)
