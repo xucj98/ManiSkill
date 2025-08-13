@@ -1,0 +1,40 @@
+defaults:
+  - base
+  - _self_
+  
+exp_name: "PegIns_EeDeltaPose_DP3"
+
+obs_horizon: 2
+
+wandb_group: "PegIns_EeDeltaPose_DP3"
+
+data_path: demos/PegIns_EeDeltaPose_Pointcloud_HoleSize5_DemoVal200.h5
+
+train_dataset:
+  num_traj: 1000
+
+model:
+  visual_encoder_config:
+    _target_: odpc.models.vision.DP3Encoder
+    obs_meta:
+      base_camera:
+        type: point_cloud
+        point_cloud: sensor_data.base_camera.point_cloud
+        shape: [1, 1024, 3]
+        output_dim: 64
+  noise_pred_net_config:
+    diffusion_step_embed_dim: 128
+    down_dims: [512, 1024, 2048]
+    global_cond_dim: 128
+
+evaluator:
+  env_configs:
+    ind:
+      env:
+        env_kwargs:
+          robot_uids: panda_peg_insertion
+          clearance: 0.005
+        wrappers:
+          - _target_: odpc.envs.wrappers.rgbd_to_pointcloud.RGBDToPointcloud
+            roi_region: [-1.0, 1.0, -1.0, 1.0, -0.1, 1.0]
+            num_points: 1024

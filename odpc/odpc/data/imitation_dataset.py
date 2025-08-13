@@ -148,7 +148,8 @@ class ImitationDataset(Dataset):
         if "sensor_data" in obs:
             for sensor in obs["sensor_data"].values():
                 for modality, data in sensor.items():
-                    sensor[modality] = np.transpose(data, (0, 3, 1, 2))
+                    if modality in ["rgb", "depth", "rgbd"]:
+                        sensor[modality] = np.transpose(data, (0, 3, 1, 2))
 
         return {
             "observations": obs,

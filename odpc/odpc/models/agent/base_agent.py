@@ -51,5 +51,6 @@ class BaseAgent(nn.Module):
         if "sensor_data" in obs:
             for sensor_data in obs["sensor_data"].values():
                 for modality in sensor_data:
-                    sensor_data[modality] = sensor_data[modality].permute(*dims)
+                    if modality in ["rgb", "depth", "rgbd"]:
+                        sensor_data[modality] = sensor_data[modality].permute(*dims)
         return obs

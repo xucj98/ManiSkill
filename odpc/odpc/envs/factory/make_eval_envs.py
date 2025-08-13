@@ -1,11 +1,14 @@
+from omegaconf import DictConfig
 from typing import Optional
 import gymnasium as gym
+
 import mani_skill.envs
 from mani_skill.utils import gym_utils
 from mani_skill.utils.wrappers import CPUGymWrapper, RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
 
 from odpc.envs.wrappers.frame_stack import FrameStack
+from odpc.utils.utils import instantiate_from_config
 
 def make_eval_envs(
     env_id,
@@ -14,7 +17,7 @@ def make_eval_envs(
     env_kwargs: dict,
     other_kwargs: dict,
     video_dir: Optional[str] = None,
-    wrappers: list[gym.Wrapper] = [],
+    wrappers: list[DictConfig] = [],
 ):
     """Create vectorized environment for evaluation and/or recording videos.
     For CPU vectorized environments only the first parallel environment is used to record videos.
@@ -36,7 +39,7 @@ def make_eval_envs(
             def thunk():
                 env = gym.make(env_id, reconfiguration_freq=1, **env_kwargs)
                 for wrapper in wrappers:
-                    env = wrapper(env)
+                    env = instantiate_from_config(wrapper, env=env)
                 env = FrameStack(env, num_stack=other_kwargs["obs_horizon"])
                 env = CPUGymWrapper(env, ignore_terminations=True, record_metrics=True)
                 if video_dir:
@@ -81,7 +84,7 @@ def make_eval_envs(
         )
         max_episode_steps = gym_utils.find_max_episode_steps_value(env)
         for wrapper in wrappers:
-            env = wrapper(env)
+            env = instantiate_from_config(wrapper, env=env)
         env = FrameStack(env, num_stack=other_kwargs["obs_horizon"])
         if video_dir:
             env = RecordEpisode(

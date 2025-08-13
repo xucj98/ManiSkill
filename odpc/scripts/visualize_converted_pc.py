@@ -12,8 +12,8 @@ def find_traj_and_step_from_global_index(h5_file, camera_name):
         traj_keys = sorted([key for key in f.keys() if key.startswith('traj_')])
         for traj_key in traj_keys:
             # Check if the camera group exists for this trajectory
-            if camera_name in f[traj_key]:
-                num_steps_in_traj = f[traj_key][camera_name]['point_cloud'].shape[0]
+            if camera_name in f[traj_key]['obs']['sensor_data']:
+                num_steps_in_traj = f[traj_key]['obs']['sensor_data'][camera_name]['point_cloud'].shape[0]
                 for i in range(num_steps_in_traj):
                     index_map.append({"traj_key": traj_key, "local_step": i})
                 total_steps += num_steps_in_traj
@@ -46,7 +46,7 @@ class InteractiveVisualizer:
         traj_key, local_step_index = map_entry['traj_key'], map_entry['local_step']
 
         with h5py.File(self.h5_file, 'r') as f:
-            pc_data = f[traj_key][self.camera_name]['point_cloud'][local_step_index]
+            pc_data = f[traj_key]['obs']['sensor_data'][self.camera_name]['point_cloud'][local_step_index]
             points = pc_data[:, :3]
             colors = pc_data[:, 3:] / 255.0
             
