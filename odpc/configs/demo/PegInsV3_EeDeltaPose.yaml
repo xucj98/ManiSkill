@@ -1,0 +1,14 @@
+defaults:
+  - base
+  - _self_
+
+traj_name: "PegInsV3_EeDeltaPose_HoleSize5_DemoVal20"
+num_traj: 20
+num_procs: 5
+
+motion_planning_args:
+  env_id: "PegInsertionSide-v3"
+  env_kwargs:
+    robot_uids: "panda"
+  solve_kwargs:
+    refine_steps: 1

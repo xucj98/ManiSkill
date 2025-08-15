@@ -120,6 +120,7 @@ class PegInsertionSideV3Env(PegInsertionSideV2Env):
                     half_size=[length_val / 2, radius_val, radius_val],
                     material=mat_tail,
                 )
+                builder.initial_pose = sapien.Pose(p=[0, 0, 1.0])
                 builder.set_scene_idxs(scene_idxs)
                 peg = builder.build(f"peg_{i}")
                 self.remove_from_state_dict_registry(peg)
@@ -137,6 +138,7 @@ class PegInsertionSideV3Env(PegInsertionSideV2Env):
                     depth,
                     center=centers[i].cpu().numpy(),
                 )
+                builder.initial_pose = sapien.Pose(p=[0, 0, 1.0])
                 builder.set_scene_idxs(scene_idxs)
                 box = builder.build_kinematic(f"box_with_hole_{i}")
                 self.remove_from_state_dict_registry(box)

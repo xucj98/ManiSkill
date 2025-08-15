@@ -1,0 +1,30 @@
+defaults:
+  - base
+  - _self_
+
+exp_name: "PegInsV3_EeDeltaPose"
+
+wandb_group: "PegInsV3_EeDeltaPose"
+
+data_path: demos/PegInsV3_EeDeltaPose_HoleSize5_DemoVal200_clip.rgbd.pd_ee_delta_pose.physx_cpu.compressed.h5
+
+train_dataset:
+  num_traj: 100
+
+evaluator:
+ env_configs:
+    ind:
+      env:
+        env_id: PegInsertionSide-v3
+        env_kwargs:
+          max_episode_steps: 200
+
+trainer:
+  total_iters: 80010
+  batch_size: 256
+  save_freq: 5000
+  eval_freq: 5000
+  log_freq: 1000
+  num_dataload_workers: 8
+  use_amp: true
+  amp_dtype: "float16"
