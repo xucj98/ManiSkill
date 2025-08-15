@@ -183,7 +183,10 @@ def get_nested_value(data_structure: Union[dict, list], key_path: str):
     if not key_path: # 如果 key_path 为空，返回原始数据结构
         return data_structure
 
+    key_path = key_path.replace("\\.", "\n")
     keys = key_path.split('.')
+    keys = [x.replace("\n", ".") for x in keys]
+    print(keys)
     current_data = data_structure
 
     for key_part in keys:

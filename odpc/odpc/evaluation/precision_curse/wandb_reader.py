@@ -1,13 +1,14 @@
 import wandb
 from typing import List, Dict, Any, Optional
 from omegaconf import DictConfig, OmegaConf # 用于类型提示和处理配置
+from odpc.utils.utils import get_nested_value
 
 
 class WandbReader:
     def __init__(self,
-                 entity: Optional[str],
                  project: str,
                  filters: List[DictConfig], # 列表中的每个元素是一个筛选组配置
+                 entity: Optional[str] = None,
                  **kwargs): # 捕获其他未明确定义的参数
         self.api = wandb.Api()
         self.entity = entity
@@ -37,23 +38,13 @@ class WandbReader:
         elif key.lower() == "state":
             actual_value = run.state
         elif key.lower().startswith("config."): # 检查配置项
-            config_key_path = key.split("config.")[1]
-            # 安全地从 run.config (字典) 中获取嵌套值
-            current_level = run.config
             try:
-                for part in config_key_path.split('.'):
-                    current_level = current_level[part]
-                actual_value = current_level
+                actual_value = get_nested_value(run.config, key[7:])
             except KeyError:
-                return False # 如果配置路径不存在，则不匹配
+                return False
         elif key.lower().startswith("summary."): # 检查摘要指标
-            summary_key_path = key.split("summary.")[1]
-            # 安全地从 run.summary (SummaryMetrics 对象，类似字典) 中获取嵌套值
-            current_level = run.summary
             try:
-                for part in summary_key_path.split('.'):
-                    current_level = current_level[part]
-                actual_value = current_level
+                actual_value = get_nested_value(run.summary, key[8:])
             except KeyError:
                 return False # 如果摘要路径不存在，则不匹配
         elif key.lower() == "tags": # 检查标签 (expected_value 应该是一个标签字符串)
