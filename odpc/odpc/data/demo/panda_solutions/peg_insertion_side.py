@@ -31,6 +31,7 @@ def solve(
         vis: bool = False, 
         start_after_grasp: bool = False,
         pre_insert_aug: float = 0.,
+        refine_steps: int = 3,
 ):
     env.reset(seed=seed)
     start_step = 0
@@ -107,7 +108,7 @@ def solve(
     offset = 0.01 + env.peg_half_sizes[0, 0].item()
     fine_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0])
     # refine the insertion pose
-    for _ in range(3):
+    for _ in range(refine_steps):
         delta_pose = fine_insert_pose * env.peg.pose.inv()
         ee_cur_pose = delta_pose * ee_cur_pose
         res = planner.move_to_pose_with_screw(ee_cur_pose)
@@ -150,6 +151,7 @@ def solve_from_stage(
         debug: bool = False, 
         vis: bool = False,
         clip_steps: int = 100,
+        refine_steps: int = 3,
 ):    
     planner = PandaArmMotionPlanningClipSolver(
         env, 
@@ -203,7 +205,7 @@ def solve_from_stage(
     if current_stage == "ALIGN":
         offset = 0.01 + env.peg_half_sizes[0, 0].item()
         fine_insert_pose = env.goal_pose * sapien.Pose([-offset, 0, 0])
-        for _ in range(3):
+        for _ in range(refine_steps):
             delta_pose = fine_insert_pose * env.peg.pose.inv()
             ee_cur_pose = delta_pose * ee_cur_pose
             res = planner.move_to_pose(ee_cur_pose)

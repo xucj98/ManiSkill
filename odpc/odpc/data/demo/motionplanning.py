@@ -1,7 +1,7 @@
 import os
-import os.path as osp
 import time
 import json
+import argparse
 import numpy as np
 from tqdm import tqdm
 from copy import deepcopy
@@ -30,6 +30,7 @@ MP_SOLUTIONS = {
     "PullCube-v1": solvePullCube,
     "DrawSVG-v1" : solveDrawSVG,
     "StackCuboid-v1": solveStackCuboid,
+    "PegInsertionSide-v3": solvePegInsertionSidev2
 }
 
 def _main(args, proc_id: int = 0, start_seed: int = 0) -> str:
@@ -152,3 +153,33 @@ def main(args):
         output_path = _main(args)
 
     return output_path
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-e", "--env-id", type=str, default="PickCube-v1", help=f"Environment to run motion planning solver on. Available options are {list(MP_SOLUTIONS.keys())}")
+    # parser.add_argument("-o", "--obs-mode", type=str, default="none", help="Observation mode to use. Usually this is kept as 'none' as observations are not necesary to be stored, they can be replayed later via the mani_skill.trajectory.replay_trajectory script.")
+    parser.add_argument("-n", "--num-traj", type=int, default=10, help="Number of trajectories to generate.")
+    parser.add_argument("--only-count-success", action="store_true", help="If true, generates trajectories until num_traj of them are successful and only saves the successful trajectories/videos")
+    # parser.add_argument("--reward-mode", type=str)
+    # parser.add_argument("-b", "--sim-backend", type=str, default="auto", help="Which simulation backend to use. Can be 'auto', 'cpu', 'gpu'")
+    # parser.add_argument("--render-mode", type=str, default="rgb_array", help="can be 'sensors' or 'rgb_array' which only affect what is saved to videos")
+    parser.add_argument("--vis", action="store_true", help="whether or not to open a GUI to visualize the solution live")
+    parser.add_argument("--save-video", action="store_true", help="whether or not to save videos locally")
+    parser.add_argument("--traj-name", type=str, help="The name of the trajectory .h5 file that will be created.")
+    # parser.add_argument("--shader", default="default", type=str, help="Change shader used for rendering. Default is 'default' which is very fast. Can also be 'rt' for ray tracing and generating photo-realistic renders. Can also be 'rt-fast' for a faster but lower quality ray-traced renderer")
+    parser.add_argument("--record-dir", type=str, default="demos", help="where to save the recorded trajectories")
+    parser.add_argument("--num-procs", type=int, default=1, help="Number of processes to use to help parallelize the trajectory replay process. This uses CPU multiprocessing and only works with the CPU simulation backend at the moment.")
+    parser.add_argument("--env-kwargs", type=str, default='{"obs_mode": "none", "control_mode": "pd_joint_pos"}', help="传递给环境的额外参数。")
+    parser.add_argument("--solve-kwargs", type=str, default='{}', help="传递给专家策略的额外参数。")
+    parser.add_argument("--seed", type=int, default=42)
+    
+    args = parser.parse_args()
+
+    args.env_kwargs = OmegaConf.create(json.loads(args.env_kwargs))
+    args.solve_kwargs = OmegaConf.create(json.loads(args.solve_kwargs))
+
+    return args
+
+if __name__ == "__main__":
+    args = get_args()
+    main(args)
