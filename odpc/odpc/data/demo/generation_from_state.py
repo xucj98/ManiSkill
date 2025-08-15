@@ -22,6 +22,9 @@ def run_generation_workflow(cfg: DictConfig) -> str:
     Returns:
         最终生成的、经过压缩的演示文件的路径。
     """
+
+    cfg.analysis_config = OmegaConf.load(os.path.join(cfg.motion_planning_args.analysis_dir, "config.yaml"))
+
     try:
         mp.set_start_method("spawn")
     except RuntimeError:

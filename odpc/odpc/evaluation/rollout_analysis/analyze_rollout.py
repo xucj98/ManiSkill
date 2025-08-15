@@ -162,7 +162,7 @@ def analyze_rollout(
 
     config.save_dir = parse_config_expr(config.save_dir)
     os.makedirs(config.save_dir, exist_ok=True)
-    OmegaConf.save(config, os.path.join(config.save_dir, "config.yaml"))
+    OmegaConf.save(config, os.path.join(config.save_dir, "config.yaml"), resolve=True)
     image_saver = ImageSaver(os.path.join(config.save_dir, "rgb")) if config.save_rgb else None
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
