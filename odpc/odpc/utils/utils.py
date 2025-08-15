@@ -186,7 +186,6 @@ def get_nested_value(data_structure: Union[dict, list], key_path: str):
     key_path = key_path.replace("\\.", "\n")
     keys = key_path.split('.')
     keys = [x.replace("\n", ".") for x in keys]
-    print(keys)
     current_data = data_structure
 
     for key_part in keys:
