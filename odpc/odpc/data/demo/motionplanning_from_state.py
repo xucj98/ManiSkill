@@ -177,10 +177,13 @@ def main(args):
     with h5py.File(key_states_path, "r") as f:
         num_total_states = f['episode_seed'].shape[0]
     
-    print(f"[*] 发现 {num_total_states} 个关键状态。将使用 {args.num_procs} 个进程进行处理。")
-
     indices = np.arange(num_total_states)
+    if args.num_trajs is not None:
+        rng = np.random.default_rng(args.seed)
+        indices = rng.choice(indices, size=min(args.num_trajs, num_total_states), replace=False)
     indices_split = np.array_split(indices, args.num_procs)
+
+    print(f"[*] 发现 {num_total_states} 个关键状态，处理 {len(indices)} 个状态，将使用 {args.num_procs} 个进程进行处理。")
 
     os.makedirs(args.output_dir, exist_ok=True)
     
