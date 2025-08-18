@@ -7,9 +7,10 @@ from torch.utils.data import Dataset
 
 
 class BaseKeyFrameFinder(ABC):
-    def __init__(self, model: BasePolicy, train_dataset: Dataset, **kwargs):
+    def __init__(self, model: BasePolicy, train_dataset: Dataset, seed: int = 42):
         self.model = model
         self.train_dataset = train_dataset
+        self.seed = seed
 
     @abstractmethod
     def find_key_frames_from_trajectory(self, trajectory: dict) -> dict:
