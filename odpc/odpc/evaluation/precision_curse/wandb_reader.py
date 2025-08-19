@@ -9,11 +9,13 @@ class WandbReader:
                  project: str,
                  filters: List[DictConfig], # 列表中的每个元素是一个筛选组配置
                  entity: Optional[str] = None,
+                 use_wandb_filters: bool = False,
                  **kwargs): # 捕获其他未明确定义的参数
         self.api = wandb.Api()
         self.entity = entity
         self.project = project
         self.filters_config = filters # OmegaConf ListConfig or list of DictConfig
+        self.use_wandb_filters = use_wandb_filters
         print(f"WandbReader initialized for entity='{entity}', project='{project}'. "
               f"Filters: {len(filters) if filters else 0}")
 
@@ -111,6 +113,13 @@ class WandbReader:
         
         print(f"Fetching all runs from WandB path: {path} ...")
         
+        if self.use_wandb_filters:
+            filters = OmegaConf.to_container(self.filters_config, resolve=True)
+            print(f"Applying WandB filters: {filters}")
+            runs = list(self.api.runs(path=path, filters=filters))
+            print(f"Fetched {len(runs)} runs from project '{path}' with WandB filters.")
+            return runs
+
         all_project_runs = list(self.api.runs(path=path)) # 转换为列表以避免迭代器问题
         print(f"Fetched {len(all_project_runs)} runs from project '{path}'. Now applying custom filters.")
         

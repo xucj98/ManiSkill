@@ -78,6 +78,9 @@ class WandbProcessor:
                         print(f"  ERROR: Failed to extract value for field '{field_key}' in run '{run.id}'. Error: {e}")
                     extracted_value = None
                 
+                if "remap" in field_cfg and extracted_value in field_cfg.remap:
+                    extracted_value = field_cfg.remap[extracted_value]
+
                 record[field_key] = extracted_value
 
                 # 处理缺失值
