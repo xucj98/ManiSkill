@@ -36,3 +36,19 @@ evaluator:
         env_kwargs:
           robot_uids: panda_peg_insertion
           clearance: 0.005
+
+lr_scheduler:
+  _target_: diffusers.optimization.get_scheduler
+  name: cosine
+  num_warmup_steps: 500
+  num_training_steps: ${trainer.total_iters}
+
+trainer:
+  total_iters: 160010
+  batch_size: 256
+  save_freq: 8000
+  eval_freq: 8000
+  log_freq: 1000
+  num_dataload_workers: 8
+  use_amp: true
+  amp_dtype: "float16"

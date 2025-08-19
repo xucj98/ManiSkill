@@ -10,18 +10,14 @@ analyzer:
     _target_: odpc.evaluation.precision_curse.wandb_reader.WandbReader
     entity: null
     project: ManiSkill
+    use_wandb_filters: true
     # 筛选器 (OR of ANDs)
     filters:
-      - conditions:
-          - key: group
-            value: PegIns_EeDeltaPose_HandCam
-            op: ==
-          - key: job type
-            value: train
-            op: ==
-          - key: config.optimizer.lr
-            value: 0.0001
-            op: ==
+      $or:
+        - group: PegIns_EeDeltaPose_HandCam
+          config.model.visual_encoder_config.obs_meta.hand_camera.type: rgbd
+          config.optimizer.lr: 0.0001
+          config.lr_scheduler.name: cosine
 
   # 2. 数据处理器配置
   processor:
@@ -52,14 +48,14 @@ analyzer:
         transform:
           _target_: odpc.evaluation.precision_curse.transforms.SequentialTransform
           transforms:
-            - _target_: odpc.evaluation.precision_curse.transforms.SeriesRemoveOutliersTransform
-              method: max_n
-              args:
-                n: 1
+            # - _target_: odpc.evaluation.precision_curse.transforms.SeriesRemoveOutliersTransform
+            #   method: max_n
+            #   args:
+            #     n: 1
             - _target_: odpc.evaluation.precision_curse.transforms.SeriesAggregationTransform
               method: max_n_mean # max, min, mean, median, last, first, last_n_mean, max_n_mean, min_n_mean
               args:
-                n: 3
+                n: 2
          
   # 3. 绘图器/分析器配置
   reporter:
