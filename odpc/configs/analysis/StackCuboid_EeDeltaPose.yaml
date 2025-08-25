@@ -10,18 +10,13 @@ analyzer:
     _target_: odpc.evaluation.precision_curse.wandb_reader.WandbReader
     entity: null
     project: ManiSkill
+    use_wandb_filters: true
     # 筛选器 (OR of ANDs)
     filters:
-      - conditions:
-          - key: group
-            value: StackCuboid_EeDeltaPose
-            op: ==
-          - key: job type
-            value: train
-            op: ==
-          - key: config.evaluator.env_configs.ind.env.env_kwargs.cuboid_half_size
-            value: 0.010
-            op: <=
+      $or:
+        - group: StackCuboid_EeDeltaPose
+          config.evaluator.env_configs.ind.env.env_kwargs.cuboid_half_size:
+            $lte: 0.010
 
   # 2. 数据处理器配置
   processor:
@@ -108,7 +103,7 @@ analyzer:
       
       x_axis:
         label: Cuboid Half Size (mm)
-        transformed_label: 1 / (CH - 4)
+        transformed_label: 1 / (CHS - 3)
         ticks: [4.0, 5.0, 6.0, 7.0, 10.0, 20.0]
         transform:
           _target_: odpc.evaluation.precision_curse.transforms.InverseShiftedTransform
