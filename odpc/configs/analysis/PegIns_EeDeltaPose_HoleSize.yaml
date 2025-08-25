@@ -10,22 +10,14 @@ analyzer:
     _target_: odpc.evaluation.precision_curse.wandb_reader.WandbReader
     entity: null
     project: ManiSkill
+    use_wandb_filters: true
     # 筛选器 (OR of ANDs)
     filters:
-      - conditions:
-          - key: group
-            value: PegIns_EeDeltaPose_HoleSize
-            op: ==
-          - key: job type
-            value: train
-            op: ==
-      - conditions:
-          - key: group
-            value: PegIns_EeDeltaPose_NumTraj
-            op: ==
-          - key: job type
-            value: train
-            op: ==
+      $or:
+        - group: PegIns_EeDeltaPose_HoleSize
+          # job type: train
+        - group: PegIns_EeDeltaPose_NumTraj
+          # job type: train
 
   # 2. 数据处理器配置
   processor:
