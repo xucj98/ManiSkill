@@ -10,5 +10,6 @@ motion_planning_args:
   env_id: "PegInsertionSide-v3"
   env_kwargs:
     robot_uids: "panda"
+    clearance: 0.005
   solve_kwargs:
     refine_steps: 1

@@ -34,21 +34,20 @@ class SeriesAggregationTransform(BaseTransform):
         if self.method == "max": return series.max()
         if self.method == "min": return series.min()
         if self.method == "mean": return series.mean()
-        if self.method == "last_n_mean":
+        if self.method in ["last_n_mean", "max_n_mean", "min_n_mean"]:
             n = self.args.get("n", 3)  
             if len(series) <= n:
-                return series.mean()
-            return series.tail(n).mean()
-        if self.method == "max_n_mean":
-            n = self.args.get("n", 3)
-            if len(series) <= n:
-                return series.mean()
-            return series.nlargest(n).mean()
-        if self.method == "min_n_mean":
-            n = self.args.get("n", 3)
-            if len(series) <= n:
-                return series.mean()
-            return series.nsmallest(n).mean()
+                strict = self.args.get("strict", False)
+                if strict:
+                    return None
+                else:
+                    return series.tail(n).mean()
+            if self.method == "last_n_mean":
+                return series.tail(n).mean()
+            if self.method == "max_n_mean":
+                return series.nlargest(n).mean()
+            if self.method == "min_n_mean":
+                return series.nsmallest(n).mean()
         # ... 其他聚合 ...
 
         return None

@@ -48,12 +48,8 @@ def _build_box_with_hole(
 
 @register_env("PegInsertionSide-v3", max_episode_steps=100)
 class PegInsertionSideV3Env(PegInsertionSideV2Env):
-    def __init__(self, *args, robot_uids="panda", **kwargs):
-        # 根据 v3 的规范，间隙是固定的。
-        # Peg（插头）的横截面为 0.03x0.03 -> 半径 0.015
-        # Hole（孔）的尺寸为 0.06x0.06 -> 半径 0.03
-        # 间隙 = 孔半径 - 插头半径 = 0.015
-        super().__init__(*args, robot_uids=robot_uids, clearance=0.015, **kwargs)
+    def __init__(self, *args, robot_uids="panda", clearance=0.015, **kwargs):
+        super().__init__(*args, robot_uids=robot_uids, clearance=clearance, **kwargs)
 
     def _load_scene(self, options: dict):
         # 重写方法，以使用 v3 规范中的固定尺寸。
