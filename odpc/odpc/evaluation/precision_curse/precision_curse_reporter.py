@@ -7,7 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 from typing import Dict, Any, List, Optional, Callable
 
 from odpc.utils.utils import instantiate_from_config
-from odpc.evaluation.precision_curse.transforms import BaseTransform, IdentityTransform
+from odpc.evaluation.precision_curse.transforms import BaseTransform, IdentityTransform, LogTransform, InverseShiftedTransform
 
 
 class PrecisionCurseReporter:
@@ -259,6 +259,26 @@ class PrecisionCurseReporter:
             plot_cfg,
         )
     
+    def search_precision_limit(self, df: pd.DataFrame, search_range: list) -> float:
+        grouped = df.groupby("metric")
+        best_r, best_c = 0., 0.
+        for shift in np.arange(*search_range):
+            x_transformer = InverseShiftedTransform(shift=shift)
+            y_transformer = LogTransform(base=2)
+            sum_r = 0
+            for name, group_data in grouped:
+                print(name, group_data)
+                x_data = group_data["precision"]
+                y_data = group_data["estimated_num_data"]
+                transformed_x = x_transformer(x_data)
+                transformed_y = y_transformer(y_data)
+                slope, intercept, r_value, p_value, std_err = stats.linregress(transformed_x, transformed_y)
+                sum_r += r_value
+            if sum_r > best_r:
+                best_r = sum_r
+                best_c = shift
+        return float(best_c)
+
     def report(self, processed_df: pd.DataFrame, verbose: bool = False): # 添加verbose
         print("Reporter started...")
      
@@ -268,28 +288,30 @@ class PrecisionCurseReporter:
             print(f"Raw data saved to {csv_path}")
 
         metric_vs_num_data_results = self.report_metric_vs_num_data(processed_df)
-       
         if verbose:
             print("=========== Regression results of Metric vs NumData ===========")
             print(metric_vs_num_data_results)
             print("===============================================================")
-
         if self.cfg_output and self.cfg_output.get("save_processed_data_csv", False):
             csv_path = os.path.join(self.save_dir, "metric_vs_num_data_results.csv")
             metric_vs_num_data_results.to_csv(csv_path, index=False)
             print(f"Metric vs NumData results saved to {csv_path}")
 
         estimated_num_data_results = self._estimate_num_data_for_target_metrics(metric_vs_num_data_results)
-
         if verbose:
             print("=========== Estimated numData for target metrics ===========")
             print(estimated_num_data_results)
             print("============================================================")
-        
         if self.cfg_output and self.cfg_output.get("save_processed_data_csv", False):
             csv_path = os.path.join(self.save_dir, "estimated_num_data_results.csv")
             estimated_num_data_results.to_csv(csv_path, index=False)
             print(f"Estimated numData results saved to {csv_path}")
+
+        if hasattr(self.cfg_report_num_data_vs_precision, "search_range"):
+            search_range = self.cfg_report_num_data_vs_precision.search_range
+            precision_limit = self.search_precision_limit(estimated_num_data_results, search_range)
+            print(f"precision_limit: {precision_limit:.2f}")
+            self.cfg_report_num_data_vs_precision.precision_limit = precision_limit
 
         self.report_estimated_data_vs_precision(estimated_num_data_results)
 

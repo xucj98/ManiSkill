@@ -1,7 +1,7 @@
 analyzer:
   _target_: odpc.evaluation.precision_curse.precision_curse_analyzer.PrecisionCurseAnalyzer
 
-  name: PegIns_EeDeltaPose_HandCam
+  name: PegIns_EeDeltaPose_HandCam_Refine1
   description: 探索Peg Insertion任务中，使用EeDeltaPose控制，给定成功率下，洞口大小与数据量之间的关系
   save_dir: analysis_outputs/${analyzer.name}
 
@@ -22,20 +22,12 @@ analyzer:
             $lte: 4000
           config.demo_config.motion_planning_args.env_kwargs.clearance:
             $gte: 0.004
-            $lte: 0.007
-          config.demo_config.motion_planning_args.solve_kwargs.refine_steps: null
-          # config.finetune_from_ckpt_path: null
-        - group: PegIns_EeDeltaPose_HandCam
-          config.model.visual_encoder_config.obs_meta.hand_camera.type: rgbd
-          config.optimizer.lr: 0.0001
-          config.lr_scheduler.name: cosine
-          config.train_dataset.num_traj:
-            $gte: 200
-            $lte: 4000
-          config.demo_config.motion_planning_args.env_kwargs.clearance:
-            $gte: 0.008
             $lte: 0.010
-          config.demo_config.motion_planning_args.solve_kwargs.refine_steps: 1
+          config.demo_config.motion_planning_args.solve_kwargs.refine_steps: 
+            $lte: 2
+          config.finetune_from_ckpt_path: null
+          # summary.success_once:
+          #   $gte: 0.1
         
 
   # 2. 数据处理器配置
@@ -96,7 +88,7 @@ analyzer:
       x_axis:
         label: Number of Trajectories (N)
         transformed_label: log(ND)
-        ticks: [200, 400, 1000, 2000, 4000]
+        ticks: [200, 500, 1000, 2000, 4000]
         transform:
           _target_: odpc.evaluation.precision_curse.transforms.LogTransform
           base: 2
@@ -126,7 +118,7 @@ analyzer:
       
       x_axis:
         label: Clearance of Hole (mm)
-        transformed_label: 1 / (CH - ${fmt:${..precision_limit}, .2f})
+        transformed_label: 1 / (CH - ${..precision_limit})
         ticks: [4.0, 5.0, 6.0, 7.0, 10.0]
         transform:
           _target_: odpc.evaluation.precision_curse.transforms.InverseShiftedTransform
