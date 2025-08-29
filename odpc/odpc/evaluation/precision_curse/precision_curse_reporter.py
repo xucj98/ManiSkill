@@ -267,7 +267,6 @@ class PrecisionCurseReporter:
             y_transformer = LogTransform(base=2)
             sum_r = 0
             for name, group_data in grouped:
-                print(name, group_data)
                 x_data = group_data["precision"]
                 y_data = group_data["estimated_num_data"]
                 transformed_x = x_transformer(x_data)
