@@ -114,7 +114,7 @@ analyzer:
       title: Number of Trajectories vs. Clearance of Hole (by Target Success Rate)
       grouping_legend_title: Target Success Rate
       precision_limit: 1.0
-      search_range: [0, 3, 0.05]
+      search_range: [0, 3, 0.01]
       
       x_axis:
         label: Clearance of Hole (mm)

@@ -74,7 +74,7 @@ analyzer:
             - _target_: odpc.evaluation.precision_curse.transforms.SeriesAggregationTransform
               method: max_n_mean # max, min, mean, median, last, first, last_n_mean, max_n_mean, min_n_mean
               args:
-                n: 2
+                n: 3
                 strict: true
          
   # 3. 绘图器/分析器配置
@@ -114,6 +114,10 @@ analyzer:
           marker: o
           size: 30
           alpha: 0.7
+          error_bar:
+            enabled: true        # <-- 启用误差棒
+            n_trials: 300        # <-- 设置总试验次数
+            capsize: 3           # <-- 误差棒顶部的横线宽度
         - type: linear_regression_fit # 可选，画回归线
           display_equation: true # 是否在图上显示拟合方程
           display_r_squared: true # 是否在图上显示回归系数
@@ -122,7 +126,7 @@ analyzer:
       title: Number of Trajectories vs. Clearance of Hole (by Target Success Rate)
       grouping_legend_title: Target Success Rate
       precision_limit: 1.0
-      search_range: [0, 3, 0.05]
+      search_range: [0, 3, 0.01]
       
       x_axis:
         label: Clearance of Hole (mm)
@@ -135,7 +139,7 @@ analyzer:
       y_axis:
         label: Number of Trajectories (N)
         transformed_label: log(ND)
-        ticks: [100, 1000, 10000, 100000, 1000000]
+        ticks: [100, 1000, 10000, 100000, 1000000, 10000000]
         transform:
           _target_: odpc.evaluation.precision_curse.transforms.LogTransform
           base: 2
