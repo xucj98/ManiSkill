@@ -2,9 +2,10 @@ import os
 import numpy as np
 import pandas as pd
 from scipy import stats
+from statsmodels.stats.proportion import proportion_confint
 import matplotlib.pyplot as plt
 from omegaconf import DictConfig, OmegaConf
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional, Callable, Tuple
 
 from odpc.utils.utils import instantiate_from_config
 from odpc.evaluation.precision_curse.transforms import BaseTransform, IdentityTransform, LogTransform, InverseShiftedTransform
@@ -77,7 +78,7 @@ class PrecisionCurseReporter:
             ax.set_yticks(tick_positions_transformed)
             ax.set_yticklabels(tick_labels_str)
 
-    def _report_single_group(
+    def _report_single_group_deprecated(
         self,
         ax: plt.Axes,
         original_x: pd.Series,
@@ -157,6 +158,153 @@ class PrecisionCurseReporter:
 
         return regression_results
     
+    def _report_single_group(
+        self,
+        ax: plt.Axes,
+        original_x: pd.Series,
+        original_y: pd.Series,
+        x_transformer: BaseTransform,
+        y_transformer: BaseTransform,
+        plot_config: DictConfig,
+        legend_label: str,
+    ) -> Optional[Tuple[Dict[str, float], list, list]]:
+        """为单个组绘制图表，并将统计信息整合到图例中"""
+        transformed_x = x_transformer(original_x)
+        transformed_y = y_transformer(original_y)
+
+        valid_indices = np.isfinite(transformed_x) & np.isfinite(transformed_y)
+        if not valid_indices.any():
+            return None
+
+        plot_x = transformed_x[valid_indices]
+        plot_y = transformed_y[valid_indices]
+        original_x = original_x[valid_indices]
+        original_y = original_y[valid_indices]
+        
+        regression_results: Optional[Dict[str, float]] = None
+        if len(plot_x) >= 2:
+            slope, intercept, r_value, p_value, std_err = stats.linregress(plot_x, plot_y)
+            regression_results = {
+                "slope": slope,
+                "intercept": intercept,
+                "r_value": r_value,
+                "p_value": p_value,
+                "std_err": std_err
+            }
+
+        color = None
+        handles = []
+        labels = []
+
+        # 3. 绘制元素
+        for element_cfg in plot_config.get("plot_elements", []):
+            el_type = element_cfg.type
+
+            if el_type == "scatter":
+                error_bar_cfg = element_cfg.get("error_bar")
+
+                if error_bar_cfg and error_bar_cfg.get("enabled", False):
+                    n_trials = error_bar_cfg.get("n_trials", 300)
+                    confidence = error_bar_cfg.get("confidence", 0.95)
+                    alpha = 1 - confidence
+                    
+                    # --- 核心改动在这里 ---
+                    # 1. 从成功率计算成功次数 (必须是整数)
+                    success_counts = np.round(original_y.to_numpy() * n_trials).astype(int)
+
+                    # 2. 调用 statsmodels 函数计算置信区间 (在原始数据空间)
+                    lower_bounds_orig, upper_bounds_orig = proportion_confint(
+                        count=success_counts, 
+                        nobs=n_trials, 
+                        method='wilson', 
+                        alpha=alpha
+                    )
+                    
+                    # 3. 对置信区间的上下限应用与y轴相同的变换
+                    lower_bounds_transformed = y_transformer(pd.Series(lower_bounds_orig, index=plot_y.index))
+                    upper_bounds_transformed = y_transformer(pd.Series(upper_bounds_orig, index=plot_y.index))
+
+                    visual_lower_bound = np.minimum(lower_bounds_transformed, upper_bounds_transformed)
+                    visual_upper_bound = np.maximum(lower_bounds_transformed, upper_bounds_transformed)
+                    
+                    # 4. 计算误差棒的长度 (相对于变换后的y点)
+                    y_err_lower = plot_y - visual_lower_bound
+                    y_err_upper = visual_upper_bound - plot_y
+                    y_error_bars = np.vstack([y_err_lower, y_err_upper])
+
+                    handle = ax.errorbar(
+                        plot_x, plot_y,
+                        yerr=y_error_bars,
+                        label="_nolegend_",
+                        fmt=element_cfg.get("marker", "o"),
+                        markersize=np.sqrt(element_cfg.get("size", 30)),
+                        alpha=element_cfg.get("alpha", 0.7),
+                        capsize=error_bar_cfg.get("capsize", 3),
+                        linestyle='None'
+                    )
+                    color = handle.lines[0].get_color()
+                    handles.append(handle)
+                    labels.append(legend_label)
+
+                else:
+                    handle = ax.scatter(
+                        plot_x, plot_y,
+                        label="_nolegend_",
+                        marker=element_cfg.get("marker", "o"),
+                        s=element_cfg.get("size", 30),
+                        alpha=element_cfg.get("alpha", 0.7))
+                    color = handle.get_facecolor()[0]
+                    handles.append(handle)
+                    labels.append(legend_label)
+                
+            elif el_type == "linear_regression_fit":
+                if regression_results is None:
+                    print(f"  INFO: Not enough data points ({len(plot_x)}) for linear regression in group '{legend_label}'.")
+                    continue
+                
+                slope = regression_results["slope"]
+                intercept = regression_results["intercept"]
+                r_value = regression_results["r_value"]
+
+                # --- 核心改动在这里 ---
+                # 1. 动态构建图例标签列表
+                dynamic_label_parts = legend_label if legend_label != "_nolegend_" else ""
+
+                # 2. 如果配置需要，添加方程信息
+                if element_cfg.get("display_equation", False):
+                    var_y = plot_config.y_axis.transformed_label
+                    var_x = plot_config.x_axis.transformed_label
+                    eq_str = f"{var_y} ≈ {slope:.2f}{var_x} + {intercept:.2f}"
+                    dynamic_label_parts += eq_str
+
+                # 3. 如果配置需要，添加 R² 信息
+                if element_cfg.get("display_r_squared", False):
+                    r_squared_str = f" (R²={r_value**2:.2f})"
+                    dynamic_label_parts += r_squared_str
+
+                if not dynamic_label_parts:
+                    dynamic_label_parts = "_nolegend_"
+
+                # 4. 绘制回归线，使用我们新构建的、信息丰富的标签
+                x_fit_line = np.array([plot_x.min(), plot_x.max()])
+                y_fit_line = slope * x_fit_line + intercept
+                handle = ax.plot(
+                    x_fit_line, y_fit_line, 
+                    linestyle="--", 
+                    label="_nolegend_",
+                    color=color,
+                )[0]
+                handles.append(handle)
+                labels.append(dynamic_label_parts)
+
+                # 6. 【重要】删除原来在图上写字的 ax.text() 部分
+                # --- 核心改动结束 ---
+
+            # 确保后续的任何元素（如果还有的话）都不会重复创建图例
+            legend_label = "_nolegend_"
+
+        return regression_results, handles, labels
+
     def _report_groups(
             self, 
             df: pd.DataFrame, 
@@ -167,23 +315,32 @@ class PrecisionCurseReporter:
         fig, ax = plt.subplots(figsize=plot_cfg.get("figsize", (10, 6)))
         grouped = df.groupby(group_key)
         results = []
+        handles = []
+        labels = []
         for name, group_data in grouped:
-            regression_results = self._report_single_group(
+            res = self._report_single_group(
                 ax, 
                 group_data[x_key], group_data[y_key], 
                 x_transformer, y_transformer, 
                 plot_cfg, 
                 f"{self.display_names.get(group_key, group_key)} = {name}"
             )
-            if regression_results:
+            if res:
+                regression_results, _handles, _labels = res
                 regression_results[group_key] = name
                 results.append(regression_results)
+                handles += _handles
+                labels += _labels
 
         ax.set_title(plot_cfg.title)
         self._setup_axis_ticks_and_labels(ax, plot_cfg.x_axis, x_transformer, is_x_axis=True)
         self._setup_axis_ticks_and_labels(ax, plot_cfg.y_axis, y_transformer, is_x_axis=False)
 
-        ax.legend(title=plot_cfg.grouping_legend_title)
+        ax.legend(
+            title=plot_cfg.grouping_legend_title,
+            handles=handles,
+            labels=labels,
+        )
 
         ax.grid(True, which="both", ls="-", alpha=0.5)
         fig.tight_layout()
