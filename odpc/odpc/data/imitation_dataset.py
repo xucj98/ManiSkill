@@ -137,9 +137,12 @@ class ImitationDataset(Dataset):
         for obs_processor in self.obs_processors:
             obs = obs_processor.process(obs)
 
-        act = self._get_slice_data(h5_file[f"{traj_key}/obs/extra"], slice(start, end + 1))
-        for key in act.keys():
-            act[key] = utils.expand_dim_to(act[key], 0, self.pred_horizon + 1)
+        if "extra" in obs:
+            act = self._get_slice_data(h5_file[f"{traj_key}/obs/extra"], slice(start, end + 1))
+            for key in act.keys():
+                act[key] = utils.expand_dim_to(act[key], 0, self.pred_horizon + 1)
+        else:
+            act = {}
         act["actions"] = self._get_slice_data(h5_file[f"{traj_key}/actions"], slice(start, end))
         act["actions"] = utils.expand_dim_to(act["actions"], 0, self.pred_horizon)
         for act_processor in self.act_processors:

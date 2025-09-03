@@ -1,0 +1,48 @@
+defaults:
+  - base
+  - _self_
+
+exp_name: "PegInsV1_EeDeltaPose_State"
+
+wandb_group: "PegInsV1_EeDeltaPose_State"
+
+data_path: demos/PegInsV1_EeDeltaPose_State_Demo400_clip.state.pd_ee_delta_pose.physx_cpu.h5
+
+obs_processor_configs: []
+
+obs_mode: state
+control_mode: pd_ee_delta_pose
+
+train_dataset:
+  num_traj: 100
+
+model:
+  visual_encoder_config: null
+  state_encoder_config:
+    _target_: odpc.models.state.IdentityStateEncoder
+    obs_meta:
+      states:
+        type: stack_state
+        states: [""]
+        shape: [1, 43]
+        output_dim: 43  
+  noise_pred_net_config:
+    global_cond_dim: 43
+
+evaluator:
+ env_configs:
+    ind:
+      env:
+        env_id: PegInsertionSide-v1
+        env_kwargs:
+          max_episode_steps: 300
+
+trainer:
+  total_iters: 80010
+  batch_size: 256
+  save_freq: 5000
+  eval_freq: 5000
+  log_freq: 1000
+  num_dataload_workers: 8
+  use_amp: true
+  amp_dtype: "float16"

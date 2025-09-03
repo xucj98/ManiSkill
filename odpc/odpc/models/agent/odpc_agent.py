@@ -12,7 +12,7 @@ import numpy as np
 
 import sapien.core as sapien
 
-from mani_skill import Pose
+from mani_skill.utils.structs import Pose
 from mani_skill.examples.motionplanning.panda.utils import compute_grasp_info_by_obb
 from mani_skill.utils.geometry.rotation_conversions import (
     quaternion_multiply, quaternion_invert, matrix_to_euler_angles, quaternion_to_matrix,

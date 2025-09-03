@@ -42,17 +42,17 @@ def run_generation_workflow(cfg: DictConfig) -> str:
     traj_paths.append(traj_path)
 
     # 2. (可选) 控制模式重放
-    if cfg.control_mode != cfg.motion_planning_args.env_kwargs.control_mode:
-        replay_trajectory_args = ReplayTrajectoryArgs(
-            traj_path=traj_path,
-            obs_mode=None,
-            target_control_mode=cfg.control_mode,
-            save_traj=True,
-            allow_failure=not cfg.only_count_success,
-            num_envs=cfg.num_procs,
-        )
-        traj_path = replay_trajectory(replay_trajectory_args)
-        traj_paths.append(traj_path)
+    # if cfg.control_mode != cfg.motion_planning_args.env_kwargs.control_mode:
+    #     replay_trajectory_args = ReplayTrajectoryArgs(
+    #         traj_path=traj_path,
+    #         obs_mode=None,
+    #         target_control_mode=cfg.control_mode,
+    #         save_traj=True,
+    #         allow_failure=not cfg.only_count_success,
+    #         num_envs=cfg.num_procs,
+    #     )
+    #     traj_path = replay_trajectory(replay_trajectory_args)
+    #     traj_paths.append(traj_path)
 
     # 3. (可选) 裁剪轨迹
     if cfg.get("clip", False):
@@ -67,7 +67,7 @@ def run_generation_workflow(cfg: DictConfig) -> str:
         save_traj=True,
         allow_failure=not cfg.only_count_success,
         num_envs=cfg.num_procs,
-        use_env_states=True,
+        use_first_env_state=True,
     )
     final_traj_path = replay_trajectory(replay_trajectory_args)
     OmegaConf.save(cfg, final_traj_path.replace(".h5", ".yaml"), resolve=True)

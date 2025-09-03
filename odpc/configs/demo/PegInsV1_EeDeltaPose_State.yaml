@@ -1,0 +1,14 @@
+defaults:
+  - base
+  - _self_
+
+traj_name: "PegInsV1_EeDeltaPose_State_Demo400"
+num_traj: 500
+num_procs: 10
+obs_mode: "state"
+control_mode: "pd_ee_delta_pose"
+
+motion_planning_args:
+  env_id: "PegInsertionSide-v1"
+  env_kwargs:
+    robot_uids: "panda"
