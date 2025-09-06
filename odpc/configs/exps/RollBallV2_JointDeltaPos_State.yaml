@@ -38,10 +38,11 @@ evaluator:
  env_configs:
     ind:
       env:
-        env_id: RollBall-v1
-        sim_backend: physx_cpu
+        env_id: RollBall-v2
+        sim_backend: physx_cuda
         env_kwargs:
-          max_episode_steps: 120
+          max_episode_steps: 80
+          goal_radius: 0.100
 
 trainer:
   total_iters: 200010

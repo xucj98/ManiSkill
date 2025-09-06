@@ -1,3 +1,4 @@
 from .peg_insertion_side_v2 import PegInsertionSideV2Env
 from .peg_insertion_side_v3 import PegInsertionSideV3Env
 from .stack_cuboid import StackCuboidEnv
+from .roll_ball_v2 import RollBallV2Env
