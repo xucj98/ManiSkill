@@ -57,6 +57,8 @@ class Args:
     """Whether to discard episodes that timeout and are truncated (depends on the max_episode_steps parameter of task)"""
     allow_failure: bool = False
     """Whether to include episodes that fail in saved videos and trajectory data based on the environment's evaluation returned "success" label"""
+    success_once: bool = False
+    """When no-allow-failure, whether to use success_once or success_at_end as metric."""
     vis: bool = False
     """Whether to visualize the trajectory replay via the GUI."""
     use_env_states: bool = False
@@ -231,7 +233,10 @@ def replay_parallelized_sim(
                         pbar.update(n=envs_to_flush.sum())
                         if not args.allow_failure:
                             if "success" in info:
-                                envs_to_flush &= (info["success"] == True).cpu().numpy()
+                                if args.success_once:
+                                    envs_to_flush &= np.max(env._trajectory_buffer.success, axis=0)
+                                else:
+                                    envs_to_flush &= (info["success"] == True).cpu().numpy()
                         if args.discard_timeout:
                             envs_to_flush &= (truncated == False).cpu().numpy()
                         successful_replays += envs_to_flush.sum()
@@ -360,9 +365,11 @@ def replay_cpu_sim(
                 )
 
             success = info.get("success", False)
+            if args.success_once:
+                success = np.max(env._trajectory_buffer.success)
             if args.discard_timeout:
                 success = success and (not truncated)
-
+       
             if success or args.allow_failure:
                 successful_replays += 1
                 if args.save_traj:
