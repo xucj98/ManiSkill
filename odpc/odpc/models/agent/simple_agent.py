@@ -35,7 +35,7 @@ class SimpleAgent(BaseAgent):
                 obs = processor.process(obs)
             obs = self.permute_obs(obs, [0, 1, 4, 2, 3])
             self.model_action = self.model.get_action(obs)
-
+        action_step = action_step + self.model.obs_horizon - 1
         self._action_step += 1
         return self.model_action[:, action_step: action_step+1, :]
     

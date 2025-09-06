@@ -146,7 +146,7 @@ def get_data_shape(
 
 
 def expand_dim_to(
-        a: Union[np.ndarray, torch.Tensor], dim: int, length: int
+        a: Union[np.ndarray, torch.Tensor], dim: int, length: int, pad_after: bool = True,
 ) -> Union[np.ndarray, torch.Tensor]:
     """
     将 a 的维度 dim 扩展到指定长度 length。
@@ -157,10 +157,16 @@ def expand_dim_to(
     
     if isinstance(a, np.ndarray):
         expand = np.repeat(np.take(a, indices=[-1], axis=dim), length - a.shape[dim], axis=dim)
-        a = np.concatenate((a, expand), axis=dim)
+        if pad_after:
+            a = np.concatenate((a, expand), axis=dim)
+        else:
+            a = np.concatenate((expand, a), axis=dim)
     elif isinstance(a, torch.Tensor):
         expand = torch.repeat_interleave(torch.narrow(a, dim, -1, 1), length - a.shape[dim], dim)
-        a = torch.cat((a, expand), dim=dim)
+        if pad_after:
+            a = torch.cat((a, expand), dim=dim)
+        else:
+            a = torch.cat((expand, a), dim=dim)
     else:
         raise ValueError(f"Unsupported type: {type(a)}")
 

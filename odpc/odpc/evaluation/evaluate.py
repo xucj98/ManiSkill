@@ -29,9 +29,15 @@ def evaluate_on_env(
         # pbar = tqdm(total=n)
     
     num_envs = eval_envs.num_envs
-    max_episode_steps = gym_utils.find_max_episode_steps_value(eval_envs)
+    try:
+        max_episode_steps = gym_utils.find_max_episode_steps_value(eval_envs)
+    except:
+        max_episode_steps = 0
     if progress_bar:
-        pbar = tqdm(total=n // num_envs * max_episode_steps)
+        if max_episode_steps > 0:
+            pbar = tqdm(total=n // num_envs * max_episode_steps)
+        else:
+            pbar = tqdm(total=n)
 
     with torch.no_grad():
         eval_metrics = defaultdict(list)
@@ -45,7 +51,7 @@ def evaluate_on_env(
                 action_seq = action_seq.cpu().numpy()
             for i in range(action_seq.shape[1]):
                 obs, rew, terminated, truncated, info = eval_envs.step(action_seq[:, i])
-                if progress_bar:
+                if progress_bar and max_episode_steps > 0:
                     pbar.update(1)
                 if truncated.any():
                     break
@@ -59,8 +65,8 @@ def evaluate_on_env(
                         for k, v in final_info["episode"].items():
                             eval_metrics[k].append(v)
                 eps_count += eval_envs.num_envs
-                # if progress_bar:
-                #     pbar.update(eval_envs.num_envs)
+                if progress_bar and max_episode_steps == 0:
+                    pbar.update(eval_envs.num_envs)
                 obs, info = eval_envs.reset()
                 if eps_count < n:
                     agent.reset(obs, channel_last=True)

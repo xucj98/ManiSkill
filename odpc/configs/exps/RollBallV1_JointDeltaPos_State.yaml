@@ -1,0 +1,60 @@
+defaults:
+  - base
+  - _self_
+
+exp_name: "Goal100_Demo2k"
+seed: 42
+obs_horizon: 2
+act_horizon: 8
+pred_horizon: 16
+
+wandb_group: "RollBallV1_JointDeltaPos_State"
+
+data_path: demos/RollBall_goal100_demo2k.state.pd_joint_delta_pos.physx_cuda.h5
+
+obs_processor_configs: []
+
+obs_mode: state
+control_mode: pd_joint_delta_pos
+
+train_dataset:
+  num_traj: 2000
+
+model:
+  visual_encoder_config: null
+  state_encoder_config:
+    _target_: odpc.models.state.IdentityStateEncoder
+    obs_meta:
+      states:
+        type: stack_state
+        states: [""]
+        shape: [1, 88]
+        output_dim: 88 
+  noise_pred_net_config:
+    global_cond_dim: 88
+  output_dim: 8
+
+evaluator:
+ env_configs:
+    ind:
+      env:
+        env_id: RollBall-v1
+        sim_backend: physx_cpu
+        env_kwargs:
+          max_episode_steps: 120
+
+trainer:
+  total_iters: 200010
+  batch_size: 1024
+  save_freq: 10000
+  eval_freq: 10000
+  log_freq: 1000
+  num_dataload_workers: 8
+  use_amp: true
+  amp_dtype: "float16"
+
+lr_scheduler:
+  _target_: diffusers.optimization.get_scheduler
+  name: cosine
+  num_warmup_steps: 1000
+  num_training_steps: ${trainer.total_iters}

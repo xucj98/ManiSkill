@@ -79,12 +79,13 @@ class ImitationDataset(Dataset):
             # |o|o|                             observations: 2
             # | |a|a|a|a|a|a|a|a|               actions executed: 8
             # |p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
+            pad_before = obs_horizon - 1
             pad_after = pred_horizon - obs_horizon
             # Pad after the trajectory, so all the observations are utilized in training
             # Note that in the original code, pad_after = act_horizon - 1, but I think this is not the best choice
             self.slices += [
                 (traj_idx, start, start + pred_horizon)
-                for start in range(0, traj_len - pred_horizon + pad_after, slices_step)
+                for start in range(-pad_before, traj_len - pred_horizon + pad_after, slices_step)
             ]  # slice indices follow convention [start, end)
 
             pbar.update(1)
@@ -112,7 +113,14 @@ class ImitationDataset(Dataset):
         
         elif isinstance(file, h5py.Dataset):
             if used_key is None or cur_key in used_key:
-                data = file[slice_indices]
+                if isinstance(slice_indices, slice):
+                    start, stop = slice_indices.start, slice_indices.stop
+                    if start < 0:
+                        assert slice_indices.step is None or slice_indices.step == 1
+                        data = file[0: stop]
+                        data = utils.expand_dim_to(data, 0, stop - start, pad_after=False)
+                    else:
+                        data = file[slice_indices]
                 if is_compressed_rgb_dataset(file):
                     data = decode_jpeg_sequence(data)
                 return data
@@ -153,7 +161,7 @@ class ImitationDataset(Dataset):
                 for modality, data in sensor.items():
                     if modality in ["rgb", "depth", "rgbd"]:
                         sensor[modality] = np.transpose(data, (0, 3, 1, 2))
-
+       
         return {
             "observations": obs,
             "actions": act["actions"],
