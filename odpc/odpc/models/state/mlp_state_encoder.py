@@ -18,4 +18,4 @@ class MLPStateEncoder(BaseStateEncoder):
                 in_dim = dim
             layers.append(nn.Linear(in_dim, out_dim))
             encoders[name] = nn.Sequential(*layers)
-        return encoders
+        return nn.ModuleDict(encoders)

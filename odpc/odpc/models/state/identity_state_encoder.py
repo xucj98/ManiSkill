@@ -10,4 +10,4 @@ class IdentityStateEncoder(BaseStateEncoder):
         encoders = {}
         for name, meta in self.obs_meta.items():
             encoders[name] = nn.Identity()
-        return encoders
+        return nn.ModuleDict(encoders)
